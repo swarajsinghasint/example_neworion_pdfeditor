@@ -1,6 +1,12 @@
 import 'dart:io';
-
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_drawing_board/paint_contents.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class OPdfEditScreen extends StatefulWidget {
@@ -14,6 +20,13 @@ class OPdfEditScreen extends StatefulWidget {
 
 class _OPdfEditScreenState extends State<OPdfEditScreen> {
   late final PdfViewerController _pdfViewerController;
+  final GlobalKey<SfPdfViewerState> _pdfViewerKey = GlobalKey();
+  int _selectedIndex = -1;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  List<Offset?> _points = [];
+  bool _isDrawing = false;
+  final DrawingController _drawingController = DrawingController();
 
   @override
   void initState() {
@@ -21,10 +34,63 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     _pdfViewerController = PdfViewerController();
   }
 
-  Future<void> _saveHighlightedPdf() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Save functionality coming soon!')),
-    );
+  void _goToPreviousPage() {
+    if (_currentPage > 1) {
+      _currentPage--;
+      _pdfViewerController.previousPage();
+      _points.clear(); // Clear drawing when page changes
+      setState(() {});
+    }
+  }
+
+  void _goToNextPage() {
+    if (_currentPage < _totalPages) {
+      _currentPage++;
+      _pdfViewerController.nextPage();
+      _points.clear(); // Clear drawing when page changes
+      setState(() {});
+    }
+  }
+
+  Future<void> _saveDrawing() async {
+    try {
+      final pdfDoc = PdfDocument(
+        inputBytes: await widget.pdfFile.readAsBytes(),
+      );
+
+      // Get all drawings per page and save to corresponding PDF page
+      for (int i = 0; i < _totalPages; i++) {
+        _drawingController.setPage(i + 1);
+        ByteData? imageData = await _drawingController.getImageData(i + 1);
+
+        if (imageData != null) {
+          PdfPage page = pdfDoc.pages[i];
+          final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
+
+          // Get the dimensions of the page
+          final double pageWidth = page.getClientSize().width;
+          final double pageHeight = page.getClientSize().height;
+
+          // Draw the image on the PDF page, fit to the page dimensions
+          page.graphics.drawImage(
+            image,
+            Rect.fromLTWH(0, 0, pageWidth, pageHeight),
+          );
+        }
+      }
+
+      // Save the modified PDF
+      final output = await getTemporaryDirectory();
+      final savedPath = '${output.path}/edited.pdf';
+      final file = File(savedPath);
+      await file.writeAsBytes(await pdfDoc.save());
+      pdfDoc.dispose();
+
+      // Open the saved PDF
+      OpenFile.open(savedPath);
+    } catch (e) {
+      debugPrint('Error while saving drawing: $e');
+    }
   }
 
   @override
@@ -36,47 +102,404 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            onPressed: _saveHighlightedPdf,
+            onPressed: _saveDrawing,
             icon: const Icon(Icons.save),
-            tooltip: 'Save PDF',
+            tooltip: 'Save',
           ),
         ],
       ),
-      body: SfPdfViewer.file(
-        widget.pdfFile,
-        controller: _pdfViewerController,
-        pageLayoutMode: PdfPageLayoutMode.single, // Enables left-right swipe
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.width * 1.414,
+              width: MediaQuery.of(context).size.width,
+              child: Stack(
+                children: [
+                  SfPdfViewer.file(
+                    key: _pdfViewerKey,
+                    widget.pdfFile,
+                    controller: _pdfViewerController,
+                    pageLayoutMode: PdfPageLayoutMode.single,
+                    scrollDirection: PdfScrollDirection.horizontal,
+                    canShowScrollHead: false,
+                    canShowPaginationDialog: false,
+                    pageSpacing: 0,
+                    onDocumentLoaded: (details) {
+                      setState(() {
+                        _totalPages = details.document.pages.count;
+                      });
+                    },
+                    onPageChanged: (details) {
+                      setState(() {
+                        _currentPage = details.newPageNumber;
+                      });
+                    },
+                  ),
+                  if (_isDrawing)
+                    Positioned.fill(
+                      child: DrawingCanvas(controller: _drawingController),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          CustomPaint(painter: _DrawingPainter(_points), size: Size.zero),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                onPressed: _goToPreviousPage,
+              ),
+              IconButton(
+                icon: const Icon(Icons.undo, color: Colors.white),
+                onPressed: () {
+                  _drawingController.undo();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.color_lens, color: Colors.white),
+                onPressed: _goToPreviousPage,
+              ),
+              IconButton(
+                icon: const Icon(Icons.check, color: Colors.white),
+                onPressed: _goToPreviousPage,
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+                onPressed: _goToNextPage,
+              ),
+            ],
+          ),
+        ],
       ),
       bottomNavigationBar: BottomAppBar(
         color: Colors.grey[900],
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6.0,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildBottomNavItem(Icons.edit, "Draw"),
-            _buildBottomNavItem(Icons.text_fields, "Add Text"),
-            _buildBottomNavItem(Icons.highlight, "Highlight"),
-            _buildBottomNavItem(Icons.format_underlined, "Underline"),
+            _buildBottomNavItem(Icons.edit, "Draw", 0),
+            _buildBottomNavItem(Icons.text_fields, "Add Text", 1),
+            _buildBottomNavItem(Icons.highlight, "Highlight", 2),
+            _buildBottomNavItem(Icons.format_underlined, "Underline", 3),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBottomNavItem(IconData icon, String label) {
-    return InkWell(
-      onTap: () {}, // You can implement functionality later
+  Widget _buildBottomNavItem(IconData icon, String label, int index) {
+    final bool isSelected = _selectedIndex == index;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedIndex = -1;
+            _isDrawing = false;
+          } else {
+            _selectedIndex = index;
+            _isDrawing = index == 0;
+          }
+        });
+      },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(
+            icon,
+            color: isSelected ? Colors.yellow : Colors.white,
+            size: isSelected ? 30 : 24,
+          ),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(
+              color: isSelected ? Colors.yellow : Colors.white,
+              fontSize: isSelected ? 14 : 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+class DrawingCanvas extends StatefulWidget {
+  final DrawingController controller;
+  const DrawingCanvas({required this.controller});
+
+  @override
+  State<DrawingCanvas> createState() => _DrawingCanvasState();
+}
+
+class _DrawingCanvasState extends State<DrawingCanvas> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(() {
+      setState(() {}); // Triggers rebuild when DrawingController updates
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(() {
+      setState(() {});
+    });
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onPanStart:
+          (details) => widget.controller.startDraw(details.localPosition),
+      onPanUpdate:
+          (details) => widget.controller.drawing(details.localPosition),
+      onPanEnd: (details) => widget.controller.endDraw(),
+
+      onTapUp: (details) {
+        widget.controller.selectTextBox(details.localPosition);
+      },
+      child: Stack(
+        children: [
+          ClipRect(
+            child: RepaintBoundary(
+              key: widget.controller.painterKey,
+              child: CustomPaint(
+                painter: DrawingPainter(controller: widget.controller),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          ...widget.controller.getTextBoxes().map((textBox) {
+            return Positioned(
+              left: textBox.position.dx,
+              top: textBox.position.dy,
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    textBox.position += details.delta;
+                  });
+                },
+                onDoubleTap: () async {
+                  String? newText = await _showTextEditDialog(
+                    context,
+                    textBox.text,
+                  );
+                  if (newText != null) {
+                    setState(() {
+                      textBox.text = newText;
+                    });
+                  }
+                },
+                child: Container(
+                  width: textBox.width,
+                  height: textBox.height,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.blue),
+                  ),
+                  child: Center(
+                    child: Text(textBox.text, textAlign: TextAlign.center),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showTextEditDialog(
+    BuildContext context,
+    String initialText,
+  ) async {
+    TextEditingController controller = TextEditingController(text: initialText);
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Text"),
+          content: TextField(controller: controller),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DrawingPainter extends CustomPainter {
+  final List<Offset?> points;
+  _DrawingPainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = Colors.red
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != null && points[i + 1] != null) {
+        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class DrawingController extends ChangeNotifier {
+  final Map<int, List<TextBox>> _textBoxes = {};
+  final Map<int, List<PaintContent>> _history = {};
+  final Map<int, List<PaintContent>> _undoStack = {};
+  final GlobalKey painterKey = GlobalKey();
+  int _currentPage = 0;
+  List<PaintContent> get getHistory => _history[_currentPage] ?? [];
+  List<TextBox> getTextBoxes() => _textBoxes[_currentPage] ?? [];
+  Map<int, List<TextBox>> getAllTextBoxes() => _textBoxes;
+
+  void setPage(int page) {
+    _currentPage = page;
+    _textBoxes.putIfAbsent(page, () => []);
+    _history.putIfAbsent(page, () => []);
+    _undoStack.putIfAbsent(page, () => []);
+    notifyListeners();
+  }
+
+  void selectTextBox(Offset tapPosition) {
+    for (var textBox in _textBoxes[_currentPage] ?? []) {
+      Rect textBoxRect = Rect.fromLTWH(
+        textBox.position.dx,
+        textBox.position.dy,
+        textBox.width,
+        textBox.height,
+      );
+
+      if (textBoxRect.contains(tapPosition)) {
+        // Do something when a text box is selected, like highlighting or allowing drag
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  void startDraw(Offset startPoint) {
+    _history.putIfAbsent(_currentPage, () => []);
+    _undoStack.putIfAbsent(_currentPage, () => []); // Maintain undo separately
+
+    _history[_currentPage]!.add(SimpleLine(startPoint));
+    notifyListeners();
+  }
+
+  void drawing(Offset nowPaint) {
+    if (_history[_currentPage]?.isNotEmpty == true) {
+      _history[_currentPage]!.last.update(nowPaint);
+      notifyListeners();
+    }
+  }
+
+  void endDraw() {
+    notifyListeners();
+  }
+
+  void addTextBox() {
+    _textBoxes[_currentPage] ??= [];
+    _textBoxes[_currentPage]!.add(TextBox("New Text", Offset(100, 100)));
+    notifyListeners();
+  }
+
+  void undo() {
+    if (_history[_currentPage]?.isNotEmpty == true) {
+      _undoStack[_currentPage]!.add(_history[_currentPage]!.removeLast());
+      notifyListeners();
+    }
+  }
+
+  Future<ByteData?> getImageData(int page) async {
+    try {
+      final RenderRepaintBoundary boundary =
+          painterKey.currentContext!.findRenderObject()!
+              as RenderRepaintBoundary;
+      final ui.Image image = await boundary.toImage();
+      return await image.toByteData(format: ui.ImageByteFormat.png);
+    } catch (e) {
+      debugPrint('Error capturing image: $e');
+      return null;
+    }
+  }
+
+  Map<int, List<PaintContent>> getAllDrawings() {
+    return _history;
+  }
+}
+
+abstract class PaintContent {
+  void paintOnCanvas(Canvas canvas);
+  void update(Offset newPoint);
+}
+
+class SimpleLine extends PaintContent {
+  List<Offset> points = [];
+  SimpleLine(Offset startPoint) {
+    points.add(startPoint);
+  }
+
+  @override
+  void update(Offset newPoint) {
+    points.add(newPoint);
+  }
+
+  @override
+  void paintOnCanvas(Canvas canvas) {
+    final paint =
+        Paint()
+          ..color = Colors.red
+          ..strokeWidth = 3
+          ..style = PaintingStyle.stroke;
+    for (int i = 0; i < points.length - 1; i++) {
+      canvas.drawLine(points[i], points[i + 1], paint);
+    }
+  }
+}
+
+class TextBox {
+  String text;
+  Offset position;
+  double width = 100;
+  double height = 50;
+  double fontSize = 16;
+
+  TextBox(this.text, this.position);
+}
+
+class DrawingPainter extends CustomPainter {
+  final DrawingController controller;
+  DrawingPainter({required this.controller}) : super(repaint: controller);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var content in controller.getHistory) {
+      content.paintOnCanvas(canvas);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

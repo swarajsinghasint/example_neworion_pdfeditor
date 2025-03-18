@@ -74,7 +74,7 @@ packages:
     source: hosted
     version: "1.0.8"
   device_info_plus:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: device_info_plus
       sha256: "306b78788d1bb569edb7c55d622953c2414ca12445b41c9117963e03afc5c513"
@@ -89,6 +89,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.2"
+  extension:
+    dependency: transitive
+    description:
+      name: extension
+      sha256: be3a6b7f8adad2f6e2e8c63c895d19811fcf203e23466c6296267941d0ff4f24
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.0"
   fake_async:
     dependency: transitive
     description:
@@ -134,6 +142,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_drawing_board:
+    dependency: transitive
+    description:
+      name: flutter_drawing_board
+      sha256: cc0a7bc665320628f2927632e2cdeee935ebbb48e0e6400ed504663ae704e713
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.9.5"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -375,6 +391,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  pdfx:
+    dependency: transitive
+    description:
+      name: pdfx
+      sha256: cbbd7bf54d6f37524df85d06a816fa095d124cd32d42909effddc0027f9db10b
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.8.0"
   petitparser:
     dependency: transitive
     description:
@@ -383,6 +407,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  photo_view:
+    dependency: transitive
+    description:
+      name: photo_view
+      sha256: "1fc3d970a91295fbd1364296575f854c9863f225505c28c46e0a03e48960c75e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.15.0"
   platform:
     dependency: transitive
     description:
@@ -461,7 +493,7 @@ packages:
     source: hosted
     version: "28.2.11"
   syncfusion_flutter_pdfviewer:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: syncfusion_flutter_pdfviewer
       sha256: "3d4657bb62e9955cd15e716da47c56d410397e812e0f5f15c35c9f4b92e5e978"
@@ -508,6 +540,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "28.2.11"
+  synchronized:
+    dependency: transitive
+    description:
+      name: synchronized
+      sha256: "0669c70faae6270521ee4f05bffd2919892d42d1276e6c495be80174b6bc0ef6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.1"
   term_glyph:
     dependency: transitive
     description:
@@ -532,6 +572,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  universal_platform:
+    dependency: transitive
+    description:
+      name: universal_platform
+      sha256: "64e16458a0ea9b99260ceb5467a214c1f298d647c659af1bff6d3bf82536b1ec"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
   url_launcher:
     dependency: transitive
     description:

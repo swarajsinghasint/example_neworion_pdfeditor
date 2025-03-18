@@ -40,7 +40,10 @@ dependencies:
   flutter_pdfview: ^1.4.0
   syncfusion_flutter_pdf: ^28.2.11
   path_provider: ^2.1.5
+  syncfusion_flutter_pdfviewer: ^28.2.11
 
+dependency_overrides: 
+  device_info_plus:
 
 dev_dependencies:
   flutter_test:

@@ -12,8 +12,13 @@ dependencies:
     sdk: flutter
   syncfusion_flutter_pdf: ^28.2.11
   syncfusion_flutter_pdfviewer: ^28.2.11
+  pdfx: ^2.8.0
   path_provider: ^2.1.5
   open_file: ^3.5.10
+  flutter_drawing_board: ^0.9.5
+
+dependency_overrides: 
+  device_info_plus:
 
 dev_dependencies:
   flutter_test:

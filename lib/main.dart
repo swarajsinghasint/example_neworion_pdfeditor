@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:neworion_pdf_editor_lite/neworion_pdf_edit_screen.dart';
 import 'package:neworion_pdf_editor_lite/neworion_pdf_editor_lite.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,7 +22,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(),
+      home: MyHomePage(),
     );
   }
 }
@@ -35,7 +37,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   File? _pdfFile;
   bool laoding = false;
-
+  final PdfViewerController _pdfViewerController = PdfViewerController();
   Future<void> _pickPDF() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -86,7 +88,26 @@ class _MyHomePageState extends State<MyHomePage> {
                 child:
                     _pdfFile == null
                         ? const Center(child: Text('No PDF selected'))
-                        : PDFView(filePath: _pdfFile!.path),
+                        : SfPdfViewer.file(
+                          _pdfFile!,
+                          controller: _pdfViewerController,
+                          pageLayoutMode:
+                              PdfPageLayoutMode.single, // Left-right swipe
+                          canShowTextSelectionMenu: false,
+
+                          onDocumentLoaded: (PdfDocumentLoadedDetails details) {
+                            final List<Annotation> annotations =
+                                _pdfViewerController.getAnnotations();
+                            if (annotations.isNotEmpty) {
+                              // Gets the first annotation from the collection.
+                              final Annotation annotation = annotations.first;
+                              if (annotation is HighlightAnnotation) {
+                                final Color color = annotation.color;
+                                final double opacity = annotation.opacity;
+                              }
+                            }
+                          },
+                        ),
               ),
         ],
       ),
