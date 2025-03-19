@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:neworion_pdf_editor_lite/neworion_pdf_edit_screen.dart';
 import 'package:neworion_pdf_editor_lite/neworion_pdf_editor_lite.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 

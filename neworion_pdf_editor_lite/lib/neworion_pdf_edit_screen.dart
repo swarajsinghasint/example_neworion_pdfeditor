@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_drawing_board/paint_contents.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -50,6 +51,43 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       _points.clear(); // Clear drawing when page changes
       setState(() {});
     }
+  }
+
+  void _selectColor() async {
+    Color selectedColor = await _showColorPicker(context);
+    _drawingController.setColor(selectedColor);
+  }
+
+  Future<Color> _showColorPicker(BuildContext context) async {
+    Color pickedColor = _drawingController._currentColor;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Pick a Color'),
+          content: SingleChildScrollView(
+            child: BlockPicker(
+              pickerColor: pickedColor,
+              onColorChanged: (color) {
+                pickedColor = color;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Select'),
+            ),
+          ],
+        );
+      },
+    );
+    return pickedColor;
   }
 
   Future<void> _saveDrawing() async {
@@ -166,11 +204,11 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.color_lens, color: Colors.white),
-                onPressed: _goToPreviousPage,
+                onPressed: _selectColor,
               ),
               IconButton(
                 icon: const Icon(Icons.check, color: Colors.white),
-                onPressed: _goToPreviousPage,
+                onPressed: () {},
               ),
               IconButton(
                 icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
@@ -364,6 +402,14 @@ class DrawingController extends ChangeNotifier {
   List<TextBox> getTextBoxes() => _textBoxes[_currentPage] ?? [];
   Map<int, List<TextBox>> getAllTextBoxes() => _textBoxes;
 
+  // ✅ New: Default drawing color
+  Color _currentColor = Colors.red;
+
+  void setColor(Color color) {
+    _currentColor = color;
+    notifyListeners();
+  }
+
   void setPage(int page) {
     _currentPage = page;
     _textBoxes.putIfAbsent(page, () => []);
@@ -391,9 +437,10 @@ class DrawingController extends ChangeNotifier {
 
   void startDraw(Offset startPoint) {
     _history.putIfAbsent(_currentPage, () => []);
-    _undoStack.putIfAbsent(_currentPage, () => []); // Maintain undo separately
+    _undoStack.putIfAbsent(_currentPage, () => []);
 
-    _history[_currentPage]!.add(SimpleLine(startPoint));
+    // ✅ Pass selected color to the SimpleLine
+    _history[_currentPage]!.add(SimpleLine(startPoint, _currentColor));
     notifyListeners();
   }
 
@@ -470,7 +517,9 @@ abstract class PaintContent {
 
 class SimpleLine extends PaintContent {
   List<Offset> points = [];
-  SimpleLine(Offset startPoint) {
+  Color color; // New color for line
+
+  SimpleLine(Offset startPoint, this.color) {
     points.add(startPoint);
   }
 
@@ -483,7 +532,8 @@ class SimpleLine extends PaintContent {
   void paintOnCanvas(Canvas canvas) {
     final paint =
         Paint()
-          ..color = Colors.red
+          ..color =
+              color // ✅ Use the stored color
           ..strokeWidth = 3
           ..style = PaintingStyle.stroke;
     for (int i = 0; i < points.length - 1; i++) {
