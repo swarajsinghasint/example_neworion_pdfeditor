@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -54,41 +55,12 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }
 
   void _selectColor() async {
-    Color selectedColor = await _showColorPicker(context);
+    Color selectedColor = await showColorPicker(
+      context,
+      _drawingController._currentColor,
+    );
     _drawingController.setColor(selectedColor);
     setState(() {});
-  }
-
-  Future<Color> _showColorPicker(BuildContext context) async {
-    Color pickedColor = _drawingController._currentColor;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Pick a Color'),
-          content: SingleChildScrollView(
-            child: BlockPicker(
-              pickerColor: pickedColor,
-              onColorChanged: (color) {
-                pickedColor = color;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Select'),
-            ),
-          ],
-        );
-      },
-    );
-    return pickedColor;
   }
 
   Future<void> _saveDrawing() async {
@@ -179,10 +151,9 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                       _currentPage = details.newPageNumber;
                       _isPageLoaded = false; // Reset until page fully loads
                     });
-
-                    Future.delayed(const Duration(milliseconds: 200), () {
+                    _drawingController.setPage(_currentPage);
+                    Future.delayed(const Duration(milliseconds: 400), () {
                       setState(() {
-                        _drawingController.setPage(_currentPage);
                         _isPageLoaded =
                             true; // Set after delay to allow rendering
                       });
@@ -190,9 +161,10 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                   },
                 ),
                 Positioned.fill(
-                  child: Visibility(
+                  child: Opacity(
+                    opacity: _isPageLoaded ? 1 : 0,
                     child: IgnorePointer(
-                      ignoring: _selectedIndex != 0,
+                      ignoring: _selectedIndex != 0 && _selectedIndex != 1,
                       child: DrawingCanvas(
                         controller: _drawingController,
                         currentPage: _currentPage,
@@ -498,7 +470,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                     textBox.position += details.delta;
                   });
                 },
-                onDoubleTap: () async {
+                onTap: () async {
                   String? newText = await _showTextEditDialog(
                     context,
                     textBox.text,
@@ -509,15 +481,64 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                     });
                   }
                 },
-                child: Container(
-                  width: textBox.width,
-                  height: textBox.height,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.blue),
-                  ),
-                  child: Center(
-                    child: Text(textBox.text, textAlign: TextAlign.center),
-                  ),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: textBox.width,
+                      height: textBox.height,
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.blue),
+                      ),
+                      child: Center(
+                        child: Text(
+                          textBox.text,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: textBox.fontSize),
+                        ),
+                      ),
+                    ),
+                    // Cross Icon to Remove Text Box
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            widget.controller.removeTextBox(textBox);
+                          });
+                        },
+                        child: const CircleAvatar(
+                          backgroundColor: Colors.red,
+                          radius: 10,
+                          child: Icon(
+                            Icons.close,
+                            size: 12,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Resize Icon at Bottom Right
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        onPanUpdate: (details) {
+                          setState(() {
+                            textBox.width += details.delta.dx;
+                            textBox.height += details.delta.dy;
+                          });
+                        },
+                        child: const Icon(
+                          Icons.open_with,
+                          size: 16,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -576,6 +597,11 @@ class DrawingController extends ChangeNotifier {
     _textBoxes.putIfAbsent(page, () => []);
     _history.putIfAbsent(page, () => []);
     _undoStack.putIfAbsent(page, () => []);
+    notifyListeners();
+  }
+
+  void removeTextBox(TextBox textBox) {
+    _textBoxes[_currentPage]?.remove(textBox);
     notifyListeners();
   }
 
@@ -686,6 +712,22 @@ class DrawingController extends ChangeNotifier {
   }
 }
 
+class TextBox {
+  String text;
+  Offset position;
+  double width;
+  double height;
+  double fontSize;
+
+  TextBox(
+    this.text,
+    this.position, {
+    this.width = 100,
+    this.height = 50,
+    this.fontSize = 12,
+  });
+}
+
 abstract class PaintContent {
   void paintOnCanvas(Canvas canvas);
   void update(Offset newPoint);
@@ -716,16 +758,6 @@ class SimpleLine extends PaintContent {
       canvas.drawLine(points[i], points[i + 1], paint);
     }
   }
-}
-
-class TextBox {
-  String text;
-  Offset position;
-  double width = 100;
-  double height = 50;
-  double fontSize = 16;
-
-  TextBox(this.text, this.position);
 }
 
 class DrawingPainter extends CustomPainter {
