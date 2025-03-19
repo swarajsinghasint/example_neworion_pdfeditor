@@ -207,110 +207,70 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             ),
           ),
 
-          // if (_selectedIndex == 1)
-          //   Padding(
-          //     padding: const EdgeInsets.all(8.0),
-          //     child: Row(
-          //       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          //       children: [
-          //         IconButton(
-          //           icon: Icon(
-          //             Icons.color_lens,
-          //             color: _drawingController.getCurrentColor,
-          //           ),
-          //           onPressed: _selectColor,
-          //         ),
-          //         TextButton.icon(
-          //           onPressed: () {},
-          //           label: Text("Add Text"),
-          //           icon: Icon(Icons.text_fields),
-          //         ),
-
-          //         IconButton(
-          //           icon: const Icon(Icons.check, color: Colors.white),
-          //           onPressed: () {
-          //             setState(() {
-          //               _selectedIndex = -1;
-          //             });
-          //           },
-          //         ),
-          //       ],
-          //     ),
-          //   ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Container(
-              color: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Center(
-                      child: Text(
-                        'Page $_currentPage of $_totalPages',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+          Container(
+            color: Colors.black,
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Center(
+                    child: Text(
+                      'Page $_currentPage of $_totalPages',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Previous Button
-                      Opacity(
-                        opacity: _currentPage > 1 ? 1.0 : 0.5,
-                        child: TextButton(
-                          onPressed:
-                              _currentPage > 1 ? _goToPreviousPage : null,
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Row(
-                            children: const [
-                              Icon(Icons.arrow_back_ios, color: Colors.white),
-                              SizedBox(width: 4),
-                              Text(
-                                'Previous',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Previous Button
+                    Opacity(
+                      opacity: _currentPage > 1 ? 1.0 : 0.5,
+                      child: TextButton(
+                        onPressed: _currentPage > 1 ? _goToPreviousPage : null,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.arrow_back_ios, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text(
+                              'Previous',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ],
                         ),
                       ),
+                    ),
 
-                      // Next Button
-                      Opacity(
-                        opacity: _currentPage < _totalPages ? 1.0 : 0.5,
-                        child: TextButton(
-                          onPressed:
-                              _currentPage < _totalPages ? _goToNextPage : null,
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Row(
-                            children: const [
-                              Text(
-                                'Next',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                              SizedBox(
-                                width: 4,
-                              ), // Small spacing between text and icon
-                              Icon(
-                                Icons.arrow_forward_ios,
-                                color: Colors.white,
-                              ),
-                            ],
-                          ),
+                    // Next Button
+                    Opacity(
+                      opacity: _currentPage < _totalPages ? 1.0 : 0.5,
+                      child: TextButton(
+                        onPressed:
+                            _currentPage < _totalPages ? _goToNextPage : null,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Row(
+                          children: const [
+                            Text('Next', style: TextStyle(color: Colors.white)),
+                            SizedBox(
+                              width: 4,
+                            ), // Small spacing between text and icon
+                            Icon(Icons.arrow_forward_ios, color: Colors.white),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
 
@@ -335,37 +295,80 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                           }
                           : null,
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.color_lens,
-                    color: _drawingController.getCurrentColor,
+                if (_selectedIndex != -1)
+                  IconButton(
+                    icon: Icon(
+                      Icons.color_lens,
+                      color: _drawingController.getCurrentColor,
+                    ),
+                    onPressed: _selectColor,
                   ),
-                  onPressed: _selectColor,
-                ),
 
+                if (_selectedIndex == 1)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () {
+                        _drawingController.addTextBox();
+                        setState(() {});
+                      },
+                      label: Text(
+                        "Add Text",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      icon: Icon(Icons.text_fields),
+                    ),
+                  ),
+                if (_selectedIndex == 0)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('You can draw on the PDF page'),
+                          ),
+                        );
+                      },
+                      label: Text(
+                        "Add Drawing",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      icon: Icon(Icons.draw, color: Colors.white, size: 30),
+                    ),
+                  ),
+
+                if (_selectedIndex != -1)
+                  IconButton(
+                    icon: const Icon(Icons.check, color: Colors.white),
+                    onPressed: () {
+                      setState(() {
+                        _selectedIndex = -1;
+                      });
+                    },
+                  ),
                 IconButton(
                   icon: Icon(
-                    Icons.delete,
+                    Icons.redo,
                     color:
-                        _drawingController.hasContent()
+                        _drawingController.hasContent(isRedo: true)
                             ? Colors.white
                             : Colors.grey[700],
                   ),
                   onPressed:
-                      _drawingController.hasContent()
+                      _drawingController.hasContent(isRedo: true)
                           ? () {
-                            _drawingController.undo();
+                            _drawingController.redo();
                             setState(() {});
                           }
                           : null,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      _selectedIndex = -1;
-                    });
-                  },
                 ),
               ],
             ),
@@ -395,10 +398,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         setState(() {
           if (isSelected) {
             _selectedIndex = -1;
-            _isDrawing = false;
           } else {
             _selectedIndex = index;
-            _isDrawing = index == 0;
           }
         });
       },
@@ -407,13 +408,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         children: [
           Icon(
             icon,
-            color: isSelected ? Colors.yellow : Colors.white,
-            size: isSelected ? 30 : 24,
+            color: isSelected ? Colors.white : Colors.grey,
+            size: isSelected ? 32 : 24,
           ),
           Text(
             label,
             style: TextStyle(
-              color: isSelected ? Colors.yellow : Colors.white,
+              color: isSelected ? Colors.white : Colors.grey,
               fontSize: isSelected ? 14 : 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
@@ -628,7 +629,17 @@ class DrawingController extends ChangeNotifier {
     }
   }
 
-  bool hasContent() {
+  void redo() {
+    if (_undoStack[_currentPage]?.isNotEmpty == true) {
+      _history[_currentPage]!.add(_undoStack[_currentPage]!.removeLast());
+      notifyListeners();
+    }
+  }
+
+  bool hasContent({bool isRedo = false}) {
+    if (isRedo) {
+      return _undoStack[_currentPage]?.isNotEmpty == true;
+    }
     return _history[_currentPage]?.isNotEmpty == true ||
         _textBoxes[_currentPage]?.isNotEmpty == true;
   }
