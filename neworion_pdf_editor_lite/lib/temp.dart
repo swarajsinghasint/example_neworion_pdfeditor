@@ -150,3 +150,42 @@
 //   print('PDF saved at: $path');
 //   OpenFile.open(file.path);
 // }
+
+
+
+
+  // Future<ByteData?> getImageData(int page) async {
+  //   try {
+  //     final RenderRepaintBoundary boundary =
+  //         painterKey.currentContext!.findRenderObject()!
+  //             as RenderRepaintBoundary;
+
+  //     // Increase pixel ratio to 3.0 or higher for higher resolution
+  //     final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+  //     return await image.toByteData(format: ui.ImageByteFormat.png);
+  //   } catch (e) {
+  //     debugPrint('Error capturing image: $e');
+  //     return null;
+  //   }
+  // }
+
+  // class DrawingPainter extends CustomPainter {
+//   final DrawingController controller;
+//   DrawingPainter({required this.controller}) : super(repaint: controller);
+
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     // Define the boundaries of the PDF page (within which drawing is allowed)
+//     final Rect clipRect = Rect.fromLTWH(0, 0, size.width, size.height);
+
+//     // Apply clipping to restrict drawing to this area
+//     canvas.clipRect(clipRect);
+
+//     for (var content in controller.getHistory) {
+//       content.paintOnCanvas(canvas);
+//     }
+//   }
+
+//   @override
+//   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+// }

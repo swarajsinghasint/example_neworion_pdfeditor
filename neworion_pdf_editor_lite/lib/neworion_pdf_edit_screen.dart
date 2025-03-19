@@ -58,20 +58,23 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         inputBytes: await widget.pdfFile.readAsBytes(),
       );
 
-      // Get all drawings per page and save to corresponding PDF page
       for (int i = 0; i < _totalPages; i++) {
+        // Switch page and set drawing for the current page
         _drawingController.setPage(i + 1);
-        ByteData? imageData = await _drawingController.getImageData(i + 1);
 
+        // Delay to allow page change to complete
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        ByteData? imageData = await _drawingController.getImageData(i + 1);
         if (imageData != null) {
           PdfPage page = pdfDoc.pages[i];
           final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
 
-          // Get the dimensions of the page
+          // Get page dimensions
           final double pageWidth = page.getClientSize().width;
           final double pageHeight = page.getClientSize().height;
 
-          // Draw the image on the PDF page, fit to the page dimensions
+          // Draw the captured image on the respective page
           page.graphics.drawImage(
             image,
             Rect.fromLTWH(0, 0, pageWidth, pageHeight),
@@ -79,7 +82,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         }
       }
 
-      // Save the modified PDF
+      // Save updated PDF
       final output = await getTemporaryDirectory();
       final savedPath = '${output.path}/edited.pdf';
       final file = File(savedPath);
@@ -139,14 +142,15 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                   ),
                   if (_isDrawing)
                     Positioned.fill(
-                      child: DrawingCanvas(controller: _drawingController),
+                      child: DrawingCanvas(
+                        controller: _drawingController,
+                        currentPage: _currentPage,
+                      ),
                     ),
                 ],
               ),
             ),
           ),
-
-          CustomPaint(painter: _DrawingPainter(_points), size: Size.zero),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -230,7 +234,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
 class DrawingCanvas extends StatefulWidget {
   final DrawingController controller;
-  const DrawingCanvas({required this.controller});
+  final int currentPage;
+  const DrawingCanvas({required this.controller, required this.currentPage});
 
   @override
   State<DrawingCanvas> createState() => _DrawingCanvasState();
@@ -240,9 +245,18 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   @override
   void initState() {
     super.initState();
+    widget.controller.setPage(widget.currentPage);
     widget.controller.addListener(() {
       setState(() {}); // Triggers rebuild when DrawingController updates
     });
+  }
+
+  @override
+  void didUpdateWidget(DrawingCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentPage != widget.currentPage) {
+      widget.controller.setPage(widget.currentPage);
+    }
   }
 
   @override
@@ -267,13 +281,11 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       },
       child: Stack(
         children: [
-          ClipRect(
-            child: RepaintBoundary(
-              key: widget.controller.painterKey,
-              child: CustomPaint(
-                painter: DrawingPainter(controller: widget.controller),
-                size: Size.infinite,
-              ),
+          RepaintBoundary(
+            key: widget.controller.painterKey,
+            child: CustomPaint(
+              painter: DrawingPainter(controller: widget.controller),
+              size: Size.infinite,
             ),
           ),
           ...widget.controller.getTextBoxes().map((textBox) {
@@ -342,35 +354,12 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   }
 }
 
-class _DrawingPainter extends CustomPainter {
-  final List<Offset?> points;
-  _DrawingPainter(this.points);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = Colors.red
-          ..strokeWidth = 3.0
-          ..strokeCap = StrokeCap.round;
-
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        canvas.drawLine(points[i]!, points[i + 1]!, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
 class DrawingController extends ChangeNotifier {
   final Map<int, List<TextBox>> _textBoxes = {};
   final Map<int, List<PaintContent>> _history = {};
   final Map<int, List<PaintContent>> _undoStack = {};
   final GlobalKey painterKey = GlobalKey();
-  int _currentPage = 0;
+  int _currentPage = 1;
   List<PaintContent> get getHistory => _history[_currentPage] ?? [];
   List<TextBox> getTextBoxes() => _textBoxes[_currentPage] ?? [];
   Map<int, List<TextBox>> getAllTextBoxes() => _textBoxes;
@@ -437,10 +426,34 @@ class DrawingController extends ChangeNotifier {
       final RenderRepaintBoundary boundary =
           painterKey.currentContext!.findRenderObject()!
               as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage();
-      return await image.toByteData(format: ui.ImageByteFormat.png);
+
+      // Increase pixel ratio to 3.0 or higher for higher resolution
+      final ui.Image originalImage = await boundary.toImage(pixelRatio: 3.0);
+
+      // Create a recorder to capture the flipped image
+      final ui.PictureRecorder recorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(recorder);
+
+      final double height = originalImage.height.toDouble();
+
+      // Flip vertically: Translate and scale
+      canvas.translate(0, height);
+      canvas.scale(1, -1); // Only invert Y-axis
+
+      // Draw the original image onto the flipped canvas
+      final Paint paint = Paint();
+      canvas.drawImage(originalImage, Offset.zero, paint);
+
+      // End recording and create a new image
+      final ui.Image flippedImage = await recorder.endRecording().toImage(
+        originalImage.width,
+        originalImage.height,
+      );
+
+      // Convert flipped image to byte data (PNG format)
+      return await flippedImage.toByteData(format: ui.ImageByteFormat.png);
     } catch (e) {
-      debugPrint('Error capturing image: $e');
+      debugPrint('Error capturing or flipping image: $e');
       return null;
     }
   }
