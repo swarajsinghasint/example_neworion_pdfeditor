@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:flutter_drawing_board/paint_contents.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -27,6 +26,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   int _totalPages = 1;
   List<Offset?> _points = [];
   bool _isDrawing = false;
+  bool _isPageLoaded = false;
   final DrawingController _drawingController = DrawingController();
 
   @override
@@ -56,6 +56,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   void _selectColor() async {
     Color selectedColor = await _showColorPicker(context);
     _drawingController.setColor(selectedColor);
+    setState(() {});
   }
 
   Future<Color> _showColorPicker(BuildContext context) async {
@@ -151,70 +152,223 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: SizedBox(
-              height: MediaQuery.of(context).size.width * 1.414,
-              width: MediaQuery.of(context).size.width,
-              child: Stack(
-                children: [
-                  SfPdfViewer.file(
-                    key: _pdfViewerKey,
-                    widget.pdfFile,
-                    controller: _pdfViewerController,
-                    pageLayoutMode: PdfPageLayoutMode.single,
-                    scrollDirection: PdfScrollDirection.horizontal,
-                    canShowScrollHead: false,
-                    canShowPaginationDialog: false,
-                    pageSpacing: 0,
-                    onDocumentLoaded: (details) {
+          SizedBox(
+            height: MediaQuery.of(context).size.width * 1.414,
+            width: MediaQuery.of(context).size.width,
+            child: Stack(
+              children: [
+                SfPdfViewer.file(
+                  key: _pdfViewerKey,
+                  widget.pdfFile,
+                  controller: _pdfViewerController,
+                  pageLayoutMode: PdfPageLayoutMode.single,
+                  scrollDirection: PdfScrollDirection.horizontal,
+                  canShowScrollHead: false,
+                  canShowPaginationDialog: false,
+                  canShowTextSelectionMenu: false,
+                  pageSpacing: 0,
+                  maxZoomLevel: 1,
+                  onDocumentLoaded: (details) {
+                    setState(() {
+                      _totalPages = details.document.pages.count;
+                      _isPageLoaded = true; // Set page loaded to true
+                    });
+                  },
+                  onPageChanged: (details) {
+                    setState(() {
+                      _currentPage = details.newPageNumber;
+                      _isPageLoaded = false; // Reset until page fully loads
+                    });
+
+                    Future.delayed(const Duration(milliseconds: 200), () {
                       setState(() {
-                        _totalPages = details.document.pages.count;
+                        _drawingController.setPage(_currentPage);
+                        _isPageLoaded =
+                            true; // Set after delay to allow rendering
                       });
-                    },
-                    onPageChanged: (details) {
-                      setState(() {
-                        _currentPage = details.newPageNumber;
-                      });
-                    },
-                  ),
-                  if (_isDrawing)
-                    Positioned.fill(
+                    });
+                  },
+                ),
+                Positioned.fill(
+                  child: Visibility(
+                    child: IgnorePointer(
+                      ignoring: _selectedIndex != 0,
                       child: DrawingCanvas(
                         controller: _drawingController,
                         currentPage: _currentPage,
+                        callback: () {
+                          setState(() {});
+                        },
                       ),
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // if (_selectedIndex == 1)
+          //   Padding(
+          //     padding: const EdgeInsets.all(8.0),
+          //     child: Row(
+          //       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          //       children: [
+          //         IconButton(
+          //           icon: Icon(
+          //             Icons.color_lens,
+          //             color: _drawingController.getCurrentColor,
+          //           ),
+          //           onPressed: _selectColor,
+          //         ),
+          //         TextButton.icon(
+          //           onPressed: () {},
+          //           label: Text("Add Text"),
+          //           icon: Icon(Icons.text_fields),
+          //         ),
+
+          //         IconButton(
+          //           icon: const Icon(Icons.check, color: Colors.white),
+          //           onPressed: () {
+          //             setState(() {
+          //               _selectedIndex = -1;
+          //             });
+          //           },
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Container(
+              color: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Center(
+                      child: Text(
+                        'Page $_currentPage of $_totalPages',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Previous Button
+                      Opacity(
+                        opacity: _currentPage > 1 ? 1.0 : 0.5,
+                        child: TextButton(
+                          onPressed:
+                              _currentPage > 1 ? _goToPreviousPage : null,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.arrow_back_ios, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text(
+                                'Previous',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Next Button
+                      Opacity(
+                        opacity: _currentPage < _totalPages ? 1.0 : 0.5,
+                        child: TextButton(
+                          onPressed:
+                              _currentPage < _totalPages ? _goToNextPage : null,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Row(
+                            children: const [
+                              Text(
+                                'Next',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              SizedBox(
+                                width: 4,
+                              ), // Small spacing between text and icon
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                onPressed: _goToPreviousPage,
-              ),
-              IconButton(
-                icon: const Icon(Icons.undo, color: Colors.white),
-                onPressed: () {
-                  _drawingController.undo();
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.color_lens, color: Colors.white),
-                onPressed: _selectColor,
-              ),
-              IconButton(
-                icon: const Icon(Icons.check, color: Colors.white),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                onPressed: _goToNextPage,
-              ),
-            ],
+
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.undo,
+                    color:
+                        _drawingController.hasContent()
+                            ? Colors.white
+                            : Colors.grey[700],
+                  ),
+                  onPressed:
+                      _drawingController.hasContent()
+                          ? () {
+                            _drawingController.undo();
+                            setState(() {});
+                          }
+                          : null,
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.color_lens,
+                    color: _drawingController.getCurrentColor,
+                  ),
+                  onPressed: _selectColor,
+                ),
+
+                IconButton(
+                  icon: Icon(
+                    Icons.delete,
+                    color:
+                        _drawingController.hasContent()
+                            ? Colors.white
+                            : Colors.grey[700],
+                  ),
+                  onPressed:
+                      _drawingController.hasContent()
+                          ? () {
+                            _drawingController.undo();
+                            setState(() {});
+                          }
+                          : null,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.check, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      _selectedIndex = -1;
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -224,7 +378,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildBottomNavItem(Icons.edit, "Draw", 0),
-            _buildBottomNavItem(Icons.text_fields, "Add Text", 1),
+            _buildBottomNavItem(Icons.text_fields, "Text", 1),
             _buildBottomNavItem(Icons.highlight, "Highlight", 2),
             _buildBottomNavItem(Icons.format_underlined, "Underline", 3),
           ],
@@ -273,7 +427,12 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 class DrawingCanvas extends StatefulWidget {
   final DrawingController controller;
   final int currentPage;
-  const DrawingCanvas({required this.controller, required this.currentPage});
+  final VoidCallback callback;
+  const DrawingCanvas({
+    required this.controller,
+    required this.currentPage,
+    required this.callback,
+  });
 
   @override
   State<DrawingCanvas> createState() => _DrawingCanvasState();
@@ -312,18 +471,20 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
           (details) => widget.controller.startDraw(details.localPosition),
       onPanUpdate:
           (details) => widget.controller.drawing(details.localPosition),
-      onPanEnd: (details) => widget.controller.endDraw(),
+      onPanEnd: (details) => widget.callback(),
 
       onTapUp: (details) {
         widget.controller.selectTextBox(details.localPosition);
       },
       child: Stack(
         children: [
-          RepaintBoundary(
-            key: widget.controller.painterKey,
-            child: CustomPaint(
-              painter: DrawingPainter(controller: widget.controller),
-              size: Size.infinite,
+          ClipRect(
+            child: RepaintBoundary(
+              key: widget.controller.painterKey,
+              child: CustomPaint(
+                painter: DrawingPainter(controller: widget.controller),
+                size: Size.infinite,
+              ),
             ),
           ),
           ...widget.controller.getTextBoxes().map((textBox) {
@@ -397,14 +558,13 @@ class DrawingController extends ChangeNotifier {
   final Map<int, List<PaintContent>> _history = {};
   final Map<int, List<PaintContent>> _undoStack = {};
   final GlobalKey painterKey = GlobalKey();
-  int _currentPage = 1;
+  int _currentPage = 0;
   List<PaintContent> get getHistory => _history[_currentPage] ?? [];
   List<TextBox> getTextBoxes() => _textBoxes[_currentPage] ?? [];
   Map<int, List<TextBox>> getAllTextBoxes() => _textBoxes;
-
   // ✅ New: Default drawing color
   Color _currentColor = Colors.red;
-
+  Color get getCurrentColor => _currentColor;
   void setColor(Color color) {
     _currentColor = color;
     notifyListeners();
@@ -466,6 +626,11 @@ class DrawingController extends ChangeNotifier {
       _undoStack[_currentPage]!.add(_history[_currentPage]!.removeLast());
       notifyListeners();
     }
+  }
+
+  bool hasContent() {
+    return _history[_currentPage]?.isNotEmpty == true ||
+        _textBoxes[_currentPage]?.isNotEmpty == true;
   }
 
   Future<ByteData?> getImageData(int page) async {
