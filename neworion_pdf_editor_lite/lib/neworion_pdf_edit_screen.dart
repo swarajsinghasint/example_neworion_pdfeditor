@@ -799,11 +799,16 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
               top: textBox.position.dy,
               child: GestureDetector(
                 onPanUpdate: (details) {
-                  setState(() {
-                    textBox.position += details.delta;
-                  });
+                  if (widget.selectedMode == DrawingMode.text) {
+                    setState(() {
+                      textBox.position += details.delta;
+                    });
+                  }
                 },
                 onTap: () async {
+                  if (widget.selectedMode != DrawingMode.text) {
+                    return;
+                  }
                   Map<String, dynamic>? result = await _showTextEditDialog(
                     context,
                     textBox,
