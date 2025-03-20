@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
-import 'package:neworion_pdf_editor_lite/neworion_pdf_edit_screen.dart' as OPdf;
+import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart' as OPdf;
 
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 class TexteditingboxContent extends StatefulWidget {
   const TexteditingboxContent({super.key, required this.textBox});

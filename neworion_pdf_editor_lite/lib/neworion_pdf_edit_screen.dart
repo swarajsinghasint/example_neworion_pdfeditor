@@ -4,8 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
 import 'package:neworion_pdf_editor_lite/components/textEditingBox.dart';
+import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -31,6 +36,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   bool _isPageLoaded = false;
   final DrawingController _drawingController = DrawingController();
   final AnnotationController _annotationController = AnnotationController();
+  final TextBoxController _textBoxController = TextBoxController();
+  final ImageController _imageController = ImageController();
   Color _highlightColor = Colors.yellow;
   Color _underlineColor = Colors.green;
 
@@ -75,13 +82,20 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     }
   }
 
-  void _selectColor() async {
+  selectColor() async {
     Color selectedColor = await showColorPicker(
       context,
-      _drawingController._currentColor,
+      _drawingController.getCurrentColor,
     );
     _drawingController.setColor(selectedColor);
     setState(() {});
+  }
+
+  Future<Uint8List> _convertImageToUint8List(ui.Image image) async {
+    final ByteData? byteData = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    return byteData!.buffer.asUint8List();
   }
 
   Future<void> _saveDrawing() async {
@@ -93,14 +107,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       for (int i = 0; i < _totalPages; i++) {
         // Switch page and set drawing for the current page
         _drawingController.setPage(i + 1);
-
+        PdfPage page = pdfDoc.pages[i];
         // Delay to allow page change to complete
         await Future.delayed(const Duration(milliseconds: 200));
 
         // Get drawing data as image and add it to the PDF
         ByteData? imageData = await _drawingController.getImageData(i + 1);
         if (imageData != null) {
-          PdfPage page = pdfDoc.pages[i];
           final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
 
           // Get page dimensions
@@ -114,11 +127,34 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           );
         }
 
+        // ✅ Add images to PDF
+
+        for (var imageBox in _imageController.getAllImageBoxes()[i + 1] ?? []) {
+          final imgData = await _convertImageToUint8List(imageBox.image);
+          final PdfImage pdfImage = PdfBitmap(imgData);
+
+          final double scaleFactorX =
+              page.getClientSize().width / MediaQuery.of(context).size.width;
+          final double scaleFactorY =
+              page.getClientSize().height /
+              (MediaQuery.of(context).size.width *
+                  1.414); // Aspect ratio correction
+
+          // Corrected position and dimensions
+          double scaledX = imageBox.position.dx * scaleFactorX;
+          double scaledY = imageBox.position.dy * scaleFactorY;
+          double scaledWidth = imageBox.width * scaleFactorX;
+          double scaledHeight = imageBox.height * scaleFactorY;
+
+          page.graphics.drawImage(
+            pdfImage,
+            Rect.fromLTWH(scaledX, scaledY, scaledWidth, scaledHeight),
+          );
+        }
+
         // ✅ Draw text boxes on the PDF
         for (TextBox textBox
-            in _drawingController.getAllTextBoxes()[i + 1] ?? []) {
-          PdfPage page = pdfDoc.pages[i];
-
+            in _textBoxController.getAllTextBoxes()[i + 1] ?? []) {
           final double scaleFactorX =
               page.getClientSize().width / MediaQuery.of(context).size.width;
           final double scaleFactorY =
@@ -158,7 +194,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
         // ✅ Add Annotations (Highlight/Underline)
         for (AnnotationAction action
-            in _annotationController._annotationHistory[i + 1] ?? []) {
+            in _annotationController.getAnnotationHistory[i + 1] ?? []) {
           if (action.isAdd) {
             for (int j = 0; j < action.pdfAnnotation.length; j++) {
               if (i < pdfDoc.pages.count) {
@@ -237,6 +273,22 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     }
   }
 
+  Future<void> _addImage() async {
+    final pickedFile = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+    );
+
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final ui.Image image = frame.image;
+
+      _imageController.addImage(image);
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -253,121 +305,154 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         ],
       ),
       body: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            height: MediaQuery.of(context).size.width * 1.414,
-            width: MediaQuery.of(context).size.width,
-            child: Stack(
-              children: [
-                SfPdfViewer.file(
-                  key: _pdfViewerKey,
-                  widget.pdfFile,
-                  controller: _pdfViewerController,
-                  pageLayoutMode: PdfPageLayoutMode.single,
-                  scrollDirection: PdfScrollDirection.horizontal,
-                  canShowScrollHead: false,
-                  canShowPaginationDialog: false,
-                  canShowTextSelectionMenu: false,
-                  pageSpacing: 0,
-                  maxZoomLevel: 1,
-                  onDocumentLoaded: (details) {
-                    setState(() {
-                      _totalPages = details.document.pages.count;
-                      _isPageLoaded = true; // Set page loaded to true
-                    });
-                    _annotationController.setPage(_currentPage);
-                  },
-                  onPageChanged: (details) {
-                    setState(() {
-                      _currentPage = details.newPageNumber;
-                      _isPageLoaded = false; // Reset until page fully loads
-                    });
-                    _drawingController.setPage(_currentPage);
-                    _annotationController.setPage(_currentPage);
-                    Future.delayed(const Duration(milliseconds: 400), () {
-                      setState(() {
-                        _isPageLoaded =
-                            true; // Set after delay to allow rendering
-                      });
-                    });
-                  },
-                ),
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: _isPageLoaded ? 1 : 0,
-                    child: IgnorePointer(
-                      ignoring: _selectedIndex != 0 && _selectedIndex != 1,
-                      child: DrawingCanvas(
-                        controller: _drawingController,
-                        currentPage: _currentPage,
-                        callback: () {
-                          setState(() {});
-                        },
+          Column(
+            children: [
+              SizedBox(
+                height: MediaQuery.of(context).size.width * 1.414,
+                width: MediaQuery.of(context).size.width,
+                child: Stack(
+                  children: [
+                    SfPdfViewer.file(
+                      key: _pdfViewerKey,
+                      widget.pdfFile,
+                      controller: _pdfViewerController,
+                      pageLayoutMode: PdfPageLayoutMode.single,
+                      scrollDirection: PdfScrollDirection.horizontal,
+                      canShowScrollHead: false,
+                      canShowPaginationDialog: false,
+                      canShowTextSelectionMenu: false,
+                      pageSpacing: 0,
+                      maxZoomLevel: 1,
+                      onDocumentLoaded: (details) {
+                        setState(() {
+                          _totalPages = details.document.pages.count;
+                          _isPageLoaded = true; // Set page loaded to true
+                        });
+                        _annotationController.setPage(_currentPage);
+                      },
+                      onPageChanged: (details) {
+                        setState(() {
+                          _currentPage = details.newPageNumber;
+                          _isPageLoaded = false; // Reset until page fully loads
+                        });
+                        _drawingController.setPage(_currentPage);
+                        _annotationController.setPage(_currentPage);
+                        Future.delayed(const Duration(milliseconds: 400), () {
+                          setState(() {
+                            _isPageLoaded =
+                                true; // Set after delay to allow rendering
+                          });
+                        });
+                      },
+                    ),
+                    Positioned.fill(
+                      child: Opacity(
+                        opacity: _isPageLoaded ? 1 : 0,
+                        child: IgnorePointer(
+                          ignoring:
+                              _selectedIndex != 0 &&
+                              _selectedIndex != 1 &&
+                              _selectedIndex != 4,
+                          child: DrawingCanvas(
+                            drawingController: _drawingController,
+                            textBoxController: _textBoxController,
+                            imageController: _imageController,
+                            currentPage: _currentPage,
+                            callback: () {
+                              setState(() {});
+                            },
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+              Container(
+                color: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Center(
+                        child: Text(
+                          'Page $_currentPage of $_totalPages',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Previous Button
+                        Opacity(
+                          opacity: _currentPage > 1 ? 1.0 : 0.5,
+                          child: TextButton(
+                            onPressed:
+                                _currentPage > 1 ? _goToPreviousPage : null,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Row(
+                              children: const [
+                                Icon(Icons.arrow_back_ios, color: Colors.white),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Previous',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                onPressed: _goToPreviousPage,
-              ),
-              IconButton(
-                icon: const Icon(Icons.undo, color: Colors.white),
-                onPressed: () {
-                  if (_selectedIndex == 2) {
-                    _annotationController.undo(_pdfViewerController);
-                  } else {
-                    _drawingController.undo();
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.redo, color: Colors.white),
-                onPressed: () {
-                  if (_selectedIndex == 2) {
-                    _annotationController.redo(_pdfViewerController);
-                  } else {
-                    _drawingController.redo();
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.color_lens, color: Colors.white),
-                onPressed: () {
-                  _selectedIndex == 2
-                      ? _selectAnnotationColor(true)
-                      : _selectColor();
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.add, color: Colors.white),
-                onPressed: () {
-                  _drawingController.addTextBox();
-                  setState(() {});
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                onPressed: _goToNextPage,
+                        // Next Button
+                        Opacity(
+                          opacity: _currentPage < _totalPages ? 1.0 : 0.5,
+                          child: TextButton(
+                            onPressed:
+                                _currentPage < _totalPages
+                                    ? _goToNextPage
+                                    : null,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Row(
+                              children: const [
+                                Text(
+                                  'Next',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                                SizedBox(
+                                  width: 4,
+                                ), // Small spacing between text and icon
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  color: Colors.white,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
 
-          IconButton(
-            icon: const Icon(Icons.highlight, color: Colors.white),
-            onPressed: () => _annotateText(true),
-          ),
-          IconButton(
-            icon: const Icon(Icons.format_underlined, color: Colors.white),
-            onPressed: () => _annotateText(false),
-          ),
+          if (_selectedIndex == 0) drawOption(),
+          if (_selectedIndex == 1) textOption(),
+          if (_selectedIndex == 2) highlightOption(),
+          if (_selectedIndex == 3) underlineOption(),
+          if (_selectedIndex == 4) imageOption(),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -377,13 +462,148 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           children: [
             _buildBottomNavItem(Icons.edit, "Draw", 0),
             _buildBottomNavItem(Icons.text_fields, "Text", 1),
-            _buildBottomNavItem(Icons.highlight, "Annotate", 2),
-            _buildBottomNavItem(Icons.image_outlined, "Image", 3),
+            _buildBottomNavItem(Icons.highlight, "Highlight", 2),
+            _buildBottomNavItem(Icons.format_underline, "Underline", 3),
+            _buildBottomNavItem(Icons.image_outlined, "Image", 4),
           ],
         ),
       ),
     );
   }
+
+  Widget buildOptionRow({
+    required dynamic controller,
+    required VoidCallback onAdd,
+    required IconData addIcon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(5.0),
+      color: Colors.grey[900],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildUndoRedoButton(
+            icon: Icons.undo,
+            enabled: controller.hasContent(),
+            onPressed:
+                controller.hasContent()
+                    ? () {
+                      controller.undo();
+                      setState(() {});
+                    }
+                    : null,
+          ),
+          _buildUndoRedoButton(
+            icon: Icons.redo,
+            enabled: controller.hasContent(isRedo: true),
+            onPressed:
+                controller.hasContent(isRedo: true)
+                    ? () {
+                      controller.redo();
+                      setState(() {});
+                    }
+                    : null,
+          ),
+          _buildActionButton(onPressed: onAdd, icon: addIcon, label: label),
+          IconButton(
+            icon: const Icon(Icons.refresh_outlined, color: Colors.white),
+            onPressed: selectColor,
+          ),
+          IconButton(
+            icon: const Icon(Icons.check, color: Colors.white, size: 30),
+            onPressed: () {
+              setState(() {
+                _selectedIndex = -1;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Reusable Undo/Redo Button
+  Widget _buildUndoRedoButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon, color: enabled ? Colors.white : Colors.grey[700]),
+      onPressed: enabled ? onPressed : null,
+    );
+  }
+
+  // ✅ Reusable Action Button (Add Drawing, Text, Highlight, etc.)
+  Widget _buildActionButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white),
+      ),
+      child: TextButton.icon(
+        onPressed: onPressed,
+        label: Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontSize: 10),
+        ),
+        icon: Icon(icon, color: Colors.white, size: 25),
+      ),
+    );
+  }
+
+  // ✅ Draw Option
+  Widget drawOption() => buildOptionRow(
+    controller: _drawingController,
+    onAdd: () async {
+      await selectColor();
+      ScaffoldMessenger.of(context).removeCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You can draw on the PDF page')),
+      );
+    },
+    addIcon: Icons.draw,
+    label: "Add Drawing",
+  );
+
+  // ✅ Text Option
+  Widget textOption() => buildOptionRow(
+    controller: _textBoxController,
+    onAdd: () => _textBoxController.addTextBox(),
+    addIcon: Icons.text_fields,
+    label: "Add Text",
+  );
+
+  // ✅ Highlight Option
+  Widget highlightOption() => buildOptionRow(
+    controller: _annotationController,
+    onAdd: () => _annotateText(true),
+    addIcon: Icons.highlight,
+    label: "Highlight",
+  );
+
+  // ✅ Underline Option
+  Widget underlineOption() => buildOptionRow(
+    controller: _annotationController,
+    onAdd: () => _annotateText(false),
+    addIcon: Icons.format_underline,
+    label: "Underline",
+  );
+
+  // ✅ Image Option
+  Widget imageOption() => buildOptionRow(
+    controller: _imageController,
+    onAdd: () async {
+      await _addImage();
+    },
+    addIcon: Icons.image,
+    label: "Add Image",
+  );
 
   Widget _buildBottomNavItem(IconData icon, String label, int index) {
     final bool isSelected = _selectedIndex == index;
@@ -421,11 +641,16 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 }
 
 class DrawingCanvas extends StatefulWidget {
-  final DrawingController controller;
+  final DrawingController drawingController;
+  final TextBoxController textBoxController;
+  final ImageController imageController;
   final int currentPage;
   final VoidCallback callback;
+
   const DrawingCanvas({
-    required this.controller,
+    required this.drawingController,
+    required this.textBoxController,
+    required this.imageController,
     required this.currentPage,
     required this.callback,
   });
@@ -438,9 +663,17 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   @override
   void initState() {
     super.initState();
-    widget.controller.setPage(widget.currentPage);
-    widget.controller.addListener(() {
-      setState(() {}); // Triggers rebuild when DrawingController updates
+    widget.drawingController.setPage(widget.currentPage);
+    widget.textBoxController.setPage(widget.currentPage);
+    widget.imageController.setPage(widget.currentPage);
+    widget.drawingController.addListener(() {
+      setState(() {});
+    });
+    widget.textBoxController.addListener(() {
+      setState(() {});
+    });
+    widget.imageController.addListener(() {
+      setState(() {});
     });
   }
 
@@ -448,13 +681,21 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   void didUpdateWidget(DrawingCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentPage != widget.currentPage) {
-      widget.controller.setPage(widget.currentPage);
+      widget.drawingController.setPage(widget.currentPage);
+      widget.textBoxController.setPage(widget.currentPage);
+      widget.imageController.setPage(widget.currentPage);
     }
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(() {
+    widget.drawingController.removeListener(() {
+      setState(() {});
+    });
+    widget.textBoxController.removeListener(() {
+      setState(() {});
+    });
+    widget.imageController.removeListener(() {
       setState(() {});
     });
     super.dispose();
@@ -464,26 +705,27 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onPanStart:
-          (details) => widget.controller.startDraw(details.localPosition),
+          (details) =>
+              widget.drawingController.startDraw(details.localPosition),
       onPanUpdate:
-          (details) => widget.controller.drawing(details.localPosition),
+          (details) => widget.drawingController.drawing(details.localPosition),
       onPanEnd: (details) => widget.callback(),
-
       onTapUp: (details) {
-        widget.controller.selectTextBox(details.localPosition);
+        widget.textBoxController.selectTextBox(details.localPosition);
       },
       child: Stack(
         children: [
+          ...widget.imageController.getImageBoxes().map(_buildImageWidget),
           ClipRect(
             child: RepaintBoundary(
-              key: widget.controller.painterKey,
+              key: widget.drawingController.painterKey,
               child: CustomPaint(
-                painter: DrawingPainter(controller: widget.controller),
+                painter: DrawingPainter(controller: widget.drawingController),
                 size: Size.infinite,
               ),
             ),
           ),
-          ...widget.controller.getTextBoxes().map((textBox) {
+          ...widget.textBoxController.getTextBoxes().map((textBox) {
             return Positioned(
               left: textBox.position.dx,
               top: textBox.position.dy,
@@ -536,7 +778,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                       child: GestureDetector(
                         onTap: () {
                           setState(() {
-                            widget.controller.removeTextBox(textBox);
+                            widget.textBoxController.removeTextBox(textBox);
                           });
                         },
                         child: const CircleAvatar(
@@ -586,6 +828,33 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
     );
   }
 
+  Positioned _buildImageWidget(ImageBox imageBox) {
+    return Positioned(
+      left: imageBox.position.dx,
+      top: imageBox.position.dy,
+      child: GestureDetector(
+        // ✅ Handle drag and scale with one recognizer
+        onScaleUpdate: (details) {
+          setState(() {
+            // ✅ Update position
+            imageBox.position += details.focalPointDelta;
+
+            // ✅ Update scale (pinch zoom)
+            if (details.scale != 1.0) {
+              imageBox.width *= details.scale;
+              imageBox.height *= details.scale;
+            }
+          });
+        },
+        child: SizedBox(
+          width: imageBox.width,
+          height: imageBox.height,
+          child: CustomPaint(painter: ImagePainter(imageBox)),
+        ),
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>?> _showTextEditDialog(
     BuildContext context,
     TextBox textBox,
@@ -597,320 +866,4 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       },
     );
   }
-}
-
-class DrawingController extends ChangeNotifier {
-  final Map<int, List<TextBox>> _textBoxes = {};
-  final Map<int, List<PaintContent>> _history = {};
-  final Map<int, List<PaintContent>> _undoStack = {};
-  final GlobalKey painterKey = GlobalKey();
-  int _currentPage = 0;
-  List<PaintContent> get getHistory => _history[_currentPage] ?? [];
-  List<TextBox> getTextBoxes() => _textBoxes[_currentPage] ?? [];
-  Map<int, List<TextBox>> getAllTextBoxes() => _textBoxes;
-  // ✅ New: Default drawing color
-  Color _currentColor = Colors.red;
-  Color get getCurrentColor => _currentColor;
-  void setColor(Color color) {
-    _currentColor = color;
-    notifyListeners();
-  }
-
-  void setPage(int page) {
-    _currentPage = page;
-    _textBoxes.putIfAbsent(page, () => []);
-    _history.putIfAbsent(page, () => []);
-    _undoStack.putIfAbsent(page, () => []);
-    notifyListeners();
-  }
-
-  void addTextBox() {
-    _textBoxes[_currentPage] ??= [];
-    TextBox newTextBox = TextBox("New Text", Offset(100, 100));
-    _textBoxes[_currentPage]!.add(newTextBox);
-    _history[_currentPage]!.add(TextBoxAction(newTextBox, isAdd: true));
-    notifyListeners();
-  }
-
-  void removeTextBox(TextBox textBox) {
-    _textBoxes[_currentPage]?.remove(textBox);
-    _history[_currentPage]!.add(TextBoxAction(textBox, isAdd: false));
-    notifyListeners();
-  }
-
-  void selectTextBox(Offset tapPosition) {
-    for (TextBox textBox in _textBoxes[_currentPage] ?? []) {
-      Rect textBoxRect = Rect.fromLTWH(
-        textBox.position.dx,
-        textBox.position.dy,
-        textBox.width,
-        textBox.height,
-      );
-
-      if (textBoxRect.contains(tapPosition)) {
-        // Do something when a text box is selected, like highlighting or allowing drag
-        notifyListeners();
-        return;
-      }
-    }
-  }
-
-  void startDraw(Offset startPoint) {
-    _history.putIfAbsent(_currentPage, () => []);
-    _undoStack.putIfAbsent(_currentPage, () => []);
-
-    // ✅ Pass selected color to the SimpleLine
-    _history[_currentPage]!.add(SimpleLine(startPoint, _currentColor));
-    notifyListeners();
-  }
-
-  void drawing(Offset nowPaint) {
-    if (_history[_currentPage]?.isNotEmpty == true) {
-      _history[_currentPage]!.last.update(nowPaint);
-      notifyListeners();
-    }
-  }
-
-  void endDraw() {
-    notifyListeners();
-  }
-
-  void undo() {
-    if (_history[_currentPage]?.isNotEmpty == true) {
-      var lastAction = _history[_currentPage]!.removeLast();
-      _undoStack[_currentPage]!.add(lastAction);
-
-      if (lastAction is SimpleLine) {
-        // Handle drawing undo
-        notifyListeners();
-      } else if (lastAction is TextBoxAction) {
-        // Handle text box undo
-        if (lastAction.isAdd) {
-          _textBoxes[_currentPage]?.remove(lastAction.textBox);
-        } else {
-          _textBoxes[_currentPage]?.add(lastAction.textBox);
-        }
-      }
-      notifyListeners();
-    }
-  }
-
-  void redo() {
-    if (_undoStack[_currentPage]?.isNotEmpty == true) {
-      var lastAction = _undoStack[_currentPage]!.removeLast();
-      _history[_currentPage]!.add(lastAction);
-
-      if (lastAction is SimpleLine) {
-        // Redo drawing
-        notifyListeners();
-      } else if (lastAction is TextBoxAction) {
-        // Redo text box
-        if (lastAction.isAdd) {
-          _textBoxes[_currentPage]?.add(lastAction.textBox);
-        } else {
-          _textBoxes[_currentPage]?.remove(lastAction.textBox);
-        }
-      }
-      notifyListeners();
-    }
-  }
-
-  bool hasContent({bool isRedo = false}) {
-    if (isRedo) {
-      return _undoStack[_currentPage]?.isNotEmpty == true;
-    }
-    return _history[_currentPage]?.isNotEmpty == true ||
-        _textBoxes[_currentPage]?.isNotEmpty == true;
-  }
-
-  Future<ByteData?> getImageData(int page) async {
-    try {
-      final RenderRepaintBoundary boundary =
-          painterKey.currentContext!.findRenderObject()!
-              as RenderRepaintBoundary;
-
-      // Increase pixel ratio to 3.0 or higher for higher resolution
-      final ui.Image originalImage = await boundary.toImage(pixelRatio: 3.0);
-
-      // Create a recorder to capture the flipped image
-      final ui.PictureRecorder recorder = ui.PictureRecorder();
-      final Canvas canvas = Canvas(recorder);
-
-      final double height = originalImage.height.toDouble();
-
-      // Flip vertically: Translate and scale
-      canvas.translate(0, height);
-      canvas.scale(1, -1); // Only invert Y-axis
-
-      // Draw the original image onto the flipped canvas
-      final Paint paint = Paint();
-      canvas.drawImage(originalImage, Offset.zero, paint);
-
-      // End recording and create a new image
-      final ui.Image flippedImage = await recorder.endRecording().toImage(
-        originalImage.width,
-        originalImage.height,
-      );
-
-      // Convert flipped image to byte data (PNG format)
-      return await flippedImage.toByteData(format: ui.ImageByteFormat.png);
-    } catch (e) {
-      debugPrint('Error capturing or flipping image: $e');
-      return null;
-    }
-  }
-
-  Map<int, List<PaintContent>> getAllDrawings() {
-    return _history;
-  }
-}
-
-class AnnotationController extends ChangeNotifier {
-  final Map<int, List<AnnotationAction>> _annotationHistory = {};
-  final Map<int, List<AnnotationAction>> _annotationUndoStack = {};
-  int _currentPage = 0;
-
-  void setPage(int page) {
-    _currentPage = page;
-    _annotationHistory.putIfAbsent(page, () => []);
-    _annotationUndoStack.putIfAbsent(page, () => []);
-    notifyListeners();
-  }
-
-  void addAnnotation(AnnotationAction annotationAction) {
-    _annotationHistory[_currentPage]!.add(annotationAction);
-    _annotationUndoStack[_currentPage]!
-        .clear(); // Clear redo stack after new action
-    notifyListeners();
-  }
-
-  void undo(PdfViewerController pdfViewerController) {
-    if (_annotationHistory[_currentPage]?.isNotEmpty == true) {
-      var lastAction = _annotationHistory[_currentPage]!.removeLast();
-      _annotationUndoStack[_currentPage]!.add(lastAction);
-
-      pdfViewerController.removeAnnotation(lastAction.annotation);
-      notifyListeners();
-    }
-  }
-
-  void redo(PdfViewerController pdfViewerController) {
-    if (_annotationUndoStack[_currentPage]?.isNotEmpty == true) {
-      var lastAction = _annotationUndoStack[_currentPage]!.removeLast();
-      _annotationHistory[_currentPage]!.add(lastAction);
-
-      pdfViewerController.addAnnotation(lastAction.annotation);
-      notifyListeners();
-    }
-  }
-
-  void clear() {
-    _annotationHistory[_currentPage]?.clear();
-    _annotationUndoStack[_currentPage]?.clear();
-    notifyListeners();
-  }
-
-  bool hasContent({bool isRedo = false}) {
-    return isRedo
-        ? _annotationUndoStack[_currentPage]?.isNotEmpty == true
-        : _annotationHistory[_currentPage]?.isNotEmpty == true;
-  }
-}
-
-// ✅ Annotation Types
-enum AnnotationType { highlight, underline }
-
-// ✅ Annotation Action Class
-class AnnotationAction {
-  final Annotation annotation;
-  final AnnotationType type;
-  final bool isAdd;
-  final List<PdfTextMarkupAnnotation> pdfAnnotation;
-
-  AnnotationAction(
-    this.annotation,
-    this.type,
-    this.pdfAnnotation, {
-    this.isAdd = true,
-  });
-}
-
-class TextBox {
-  String text;
-  Offset position;
-  double width;
-  double height;
-  double fontSize;
-  Color? color;
-
-  TextBox(
-    this.text,
-    this.position, {
-    this.width = 100,
-    this.height = 50,
-    this.fontSize = 12,
-    this.color,
-  });
-}
-
-class TextBoxAction extends PaintContent {
-  final TextBox textBox;
-  final bool isAdd;
-
-  TextBoxAction(this.textBox, {required this.isAdd});
-
-  @override
-  void paintOnCanvas(Canvas canvas) {
-    // No painting required for undo/redo actions
-  }
-
-  @override
-  void update(Offset newPoint) {}
-}
-
-abstract class PaintContent {
-  void paintOnCanvas(Canvas canvas);
-  void update(Offset newPoint);
-}
-
-class SimpleLine extends PaintContent {
-  List<Offset> points = [];
-  Color color; // New color for line
-
-  SimpleLine(Offset startPoint, this.color) {
-    points.add(startPoint);
-  }
-
-  @override
-  void update(Offset newPoint) {
-    points.add(newPoint);
-  }
-
-  @override
-  void paintOnCanvas(Canvas canvas) {
-    final paint =
-        Paint()
-          ..color =
-              color // ✅ Use the stored color
-          ..strokeWidth = 3
-          ..style = PaintingStyle.stroke;
-    for (int i = 0; i < points.length - 1; i++) {
-      canvas.drawLine(points[i], points[i + 1], paint);
-    }
-  }
-}
-
-class DrawingPainter extends CustomPainter {
-  final DrawingController controller;
-  DrawingPainter({required this.controller}) : super(repaint: controller);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (var content in controller.getHistory) {
-      content.paintOnCanvas(canvas);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

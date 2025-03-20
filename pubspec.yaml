@@ -42,6 +42,7 @@ dependencies:
   path_provider: ^2.1.5
   syncfusion_flutter_pdfviewer: ^28.2.11
 
+
 dependency_overrides: 
   device_info_plus:
 
