@@ -17,6 +17,8 @@ dependencies:
   open_file: ^3.5.10
   flutter_drawing_board: ^0.9.5
   flutter_colorpicker: ^1.1.0
+  flutter_box_transform: ^0.4.6
+
 
 dependency_overrides: 
   device_info_plus:

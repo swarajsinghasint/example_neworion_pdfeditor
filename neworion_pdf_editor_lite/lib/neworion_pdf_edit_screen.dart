@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
+import 'package:neworion_pdf_editor_lite/components/textEditingBox.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -29,6 +30,9 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   bool _isDrawing = false;
   bool _isPageLoaded = false;
   final DrawingController _drawingController = DrawingController();
+  final AnnotationController _annotationController = AnnotationController();
+  Color _highlightColor = Colors.yellow;
+  Color _underlineColor = Colors.green;
 
   @override
   void initState() {
@@ -51,6 +55,23 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       _pdfViewerController.nextPage();
       _points.clear(); // Clear drawing when page changes
       setState(() {});
+    }
+  }
+
+  void _selectAnnotationColor(bool isHighlight) async {
+    Color selectedColor = await showColorPicker(
+      context,
+      isHighlight ? _highlightColor : _underlineColor,
+    );
+
+    if (selectedColor != null) {
+      setState(() {
+        if (isHighlight) {
+          _highlightColor = selectedColor;
+        } else {
+          _underlineColor = selectedColor;
+        }
+      });
     }
   }
 
@@ -94,26 +115,57 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         }
 
         // ✅ Draw text boxes on the PDF
-        for (var textBox in _drawingController.getAllTextBoxes()[i + 1] ?? []) {
+        for (TextBox textBox
+            in _drawingController.getAllTextBoxes()[i + 1] ?? []) {
           PdfPage page = pdfDoc.pages[i];
 
           final double scaleFactorX =
               page.getClientSize().width / MediaQuery.of(context).size.width;
           final double scaleFactorY =
               page.getClientSize().height /
-              (MediaQuery.of(context).size.width * 1.414);
+              (MediaQuery.of(context).size.width *
+                  1.414); // Adjust for aspect ratio
 
-          // Draw text on the page
+          // Properly manage text position with corrected offsets and scaling
+          double scaledX = textBox.position.dx * scaleFactorX;
+          double scaledY = textBox.position.dy * scaleFactorY;
+          double scaledWidth = textBox.width * scaleFactorX;
+          double scaledHeight = textBox.height * scaleFactorY;
+
+          // Draw text with corrected bounds and alignment
           page.graphics.drawString(
             textBox.text,
             PdfStandardFont(PdfFontFamily.helvetica, textBox.fontSize),
+            brush: PdfSolidBrush(
+              PdfColor(
+                textBox.color?.red ?? 0,
+                textBox.color?.green ?? 0,
+                textBox.color?.blue ?? 0,
+              ),
+            ),
             bounds: Rect.fromLTWH(
-              textBox.position.dx * scaleFactorX,
-              textBox.position.dy * scaleFactorY,
-              textBox.width * scaleFactorX,
-              textBox.height * scaleFactorY,
+              scaledX + 10, // Added padding to avoid edge cutoff
+              scaledY + 10,
+              scaledWidth,
+              scaledHeight,
+            ),
+            format: PdfStringFormat(
+              alignment: PdfTextAlignment.center,
+              lineAlignment: PdfVerticalAlignment.middle,
             ),
           );
+        }
+
+        // ✅ Add Annotations (Highlight/Underline)
+        for (AnnotationAction action
+            in _annotationController._annotationHistory[i + 1] ?? []) {
+          if (action.isAdd) {
+            for (int j = 0; j < action.pdfAnnotation.length; j++) {
+              if (i < pdfDoc.pages.count) {
+                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
+              }
+            }
+          }
         }
       }
 
@@ -128,6 +180,60 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       OpenFile.open(savedPath);
     } catch (e) {
       debugPrint('Error while saving drawing and text: $e');
+    }
+  }
+
+  Future<void> _annotateText(bool isHighlight) async {
+    List<PdfTextLine>? textLines =
+        _pdfViewerKey.currentState?.getSelectedTextLines();
+    if (textLines != null && textLines.isNotEmpty) {
+      List<PdfTextMarkupAnnotation> pdfAnnotations = [];
+      PdfColor selectedColor =
+          isHighlight
+              ? PdfColor(
+                _highlightColor.red,
+                _highlightColor.green,
+                _highlightColor.blue,
+              )
+              : PdfColor(
+                _underlineColor.red,
+                _underlineColor.green,
+                _underlineColor.blue,
+              );
+
+      for (var line in textLines) {
+        PdfTextMarkupAnnotation annotation = PdfTextMarkupAnnotation(
+          line.bounds,
+          line.text,
+          selectedColor,
+          textMarkupAnnotationType:
+              isHighlight
+                  ? PdfTextMarkupAnnotationType.highlight
+                  : PdfTextMarkupAnnotationType.underline,
+        );
+        pdfAnnotations.add(annotation);
+      }
+
+      Annotation displayAnnotation;
+      if (isHighlight) {
+        displayAnnotation = HighlightAnnotation(
+          textBoundsCollection: textLines,
+        );
+      } else {
+        displayAnnotation = UnderlineAnnotation(
+          textBoundsCollection: textLines,
+        );
+      }
+
+      _pdfViewerController.addAnnotation(displayAnnotation);
+      _annotationController.addAnnotation(
+        AnnotationAction(
+          displayAnnotation,
+          isHighlight ? AnnotationType.highlight : AnnotationType.underline,
+          pdfAnnotations,
+          isAdd: true,
+        ),
+      );
     }
   }
 
@@ -169,6 +275,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                       _totalPages = details.document.pages.count;
                       _isPageLoaded = true; // Set page loaded to true
                     });
+                    _annotationController.setPage(_currentPage);
                   },
                   onPageChanged: (details) {
                     setState(() {
@@ -176,6 +283,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                       _isPageLoaded = false; // Reset until page fully loads
                     });
                     _drawingController.setPage(_currentPage);
+                    _annotationController.setPage(_currentPage);
                     Future.delayed(const Duration(milliseconds: 400), () {
                       setState(() {
                         _isPageLoaded =
@@ -213,18 +321,30 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               IconButton(
                 icon: const Icon(Icons.undo, color: Colors.white),
                 onPressed: () {
-                  _drawingController.undo();
+                  if (_selectedIndex == 2) {
+                    _annotationController.undo(_pdfViewerController);
+                  } else {
+                    _drawingController.undo();
+                  }
                 },
               ),
               IconButton(
                 icon: const Icon(Icons.redo, color: Colors.white),
                 onPressed: () {
-                  _drawingController.redo();
+                  if (_selectedIndex == 2) {
+                    _annotationController.redo(_pdfViewerController);
+                  } else {
+                    _drawingController.redo();
+                  }
                 },
               ),
               IconButton(
                 icon: const Icon(Icons.color_lens, color: Colors.white),
-                onPressed: _selectColor,
+                onPressed: () {
+                  _selectedIndex == 2
+                      ? _selectAnnotationColor(true)
+                      : _selectColor();
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.add, color: Colors.white),
@@ -239,6 +359,15 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               ),
             ],
           ),
+
+          IconButton(
+            icon: const Icon(Icons.highlight, color: Colors.white),
+            onPressed: () => _annotateText(true),
+          ),
+          IconButton(
+            icon: const Icon(Icons.format_underlined, color: Colors.white),
+            onPressed: () => _annotateText(false),
+          ),
         ],
       ),
       bottomNavigationBar: BottomAppBar(
@@ -248,8 +377,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           children: [
             _buildBottomNavItem(Icons.edit, "Draw", 0),
             _buildBottomNavItem(Icons.text_fields, "Text", 1),
-            _buildBottomNavItem(Icons.highlight, "Highlight", 2),
-            _buildBottomNavItem(Icons.format_underlined, "Underline", 3),
+            _buildBottomNavItem(Icons.highlight, "Annotate", 2),
+            _buildBottomNavItem(Icons.image_outlined, "Image", 3),
           ],
         ),
       ),
@@ -365,13 +494,16 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                   });
                 },
                 onTap: () async {
-                  String? newText = await _showTextEditDialog(
+                  Map<String, dynamic>? result = await _showTextEditDialog(
                     context,
-                    textBox.text,
+                    textBox,
                   );
-                  if (newText != null) {
+
+                  if (result != null) {
                     setState(() {
-                      textBox.text = newText;
+                      textBox.text = result["text"] as String;
+                      textBox.fontSize = result["fontSize"] as double;
+                      textBox.color = result["color"] as Color;
                     });
                   }
                 },
@@ -380,8 +512,8 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                     Container(
                       width: textBox.width,
                       height: textBox.height,
-                      margin: const EdgeInsets.all(12),
-                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.blue),
                       ),
@@ -389,14 +521,18 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                         child: Text(
                           textBox.text,
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: textBox.fontSize),
+                          style: TextStyle(
+                            fontSize: textBox.fontSize,
+                            color: textBox.color ?? Colors.black,
+                            fontFamily: 'Helvetica',
+                          ),
                         ),
                       ),
                     ),
                     // Cross Icon to Remove Text Box
                     Positioned(
-                      right: 0,
-                      top: 0,
+                      right: -0, // Positioned correctly to avoid overlap
+                      top: -0,
                       child: GestureDetector(
                         onTap: () {
                           setState(() {
@@ -423,7 +559,15 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                           setState(() {
                             textBox.width += details.delta.dx;
                             textBox.height += details.delta.dy;
-                          });
+                          }); // Prevent negative width/height
+                          textBox.width = textBox.width.clamp(
+                            20,
+                            double.infinity,
+                          );
+                          textBox.height = textBox.height.clamp(
+                            20,
+                            double.infinity,
+                          );
                         },
                         child: const Icon(
                           Icons.open_with,
@@ -442,28 +586,14 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
     );
   }
 
-  Future<String?> _showTextEditDialog(
+  Future<Map<String, dynamic>?> _showTextEditDialog(
     BuildContext context,
-    String initialText,
+    TextBox textBox,
   ) async {
-    TextEditingController controller = TextEditingController(text: initialText);
-    return showDialog<String>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text("Edit Text"),
-          content: TextField(controller: controller),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: Text("OK"),
-            ),
-          ],
-        );
+        return TexteditingboxContent(textBox: textBox);
       },
     );
   }
@@ -509,7 +639,7 @@ class DrawingController extends ChangeNotifier {
   }
 
   void selectTextBox(Offset tapPosition) {
-    for (var textBox in _textBoxes[_currentPage] ?? []) {
+    for (TextBox textBox in _textBoxes[_currentPage] ?? []) {
       Rect textBoxRect = Rect.fromLTWH(
         textBox.position.dx,
         textBox.position.dy,
@@ -635,12 +765,83 @@ class DrawingController extends ChangeNotifier {
   }
 }
 
+class AnnotationController extends ChangeNotifier {
+  final Map<int, List<AnnotationAction>> _annotationHistory = {};
+  final Map<int, List<AnnotationAction>> _annotationUndoStack = {};
+  int _currentPage = 0;
+
+  void setPage(int page) {
+    _currentPage = page;
+    _annotationHistory.putIfAbsent(page, () => []);
+    _annotationUndoStack.putIfAbsent(page, () => []);
+    notifyListeners();
+  }
+
+  void addAnnotation(AnnotationAction annotationAction) {
+    _annotationHistory[_currentPage]!.add(annotationAction);
+    _annotationUndoStack[_currentPage]!
+        .clear(); // Clear redo stack after new action
+    notifyListeners();
+  }
+
+  void undo(PdfViewerController pdfViewerController) {
+    if (_annotationHistory[_currentPage]?.isNotEmpty == true) {
+      var lastAction = _annotationHistory[_currentPage]!.removeLast();
+      _annotationUndoStack[_currentPage]!.add(lastAction);
+
+      pdfViewerController.removeAnnotation(lastAction.annotation);
+      notifyListeners();
+    }
+  }
+
+  void redo(PdfViewerController pdfViewerController) {
+    if (_annotationUndoStack[_currentPage]?.isNotEmpty == true) {
+      var lastAction = _annotationUndoStack[_currentPage]!.removeLast();
+      _annotationHistory[_currentPage]!.add(lastAction);
+
+      pdfViewerController.addAnnotation(lastAction.annotation);
+      notifyListeners();
+    }
+  }
+
+  void clear() {
+    _annotationHistory[_currentPage]?.clear();
+    _annotationUndoStack[_currentPage]?.clear();
+    notifyListeners();
+  }
+
+  bool hasContent({bool isRedo = false}) {
+    return isRedo
+        ? _annotationUndoStack[_currentPage]?.isNotEmpty == true
+        : _annotationHistory[_currentPage]?.isNotEmpty == true;
+  }
+}
+
+// ✅ Annotation Types
+enum AnnotationType { highlight, underline }
+
+// ✅ Annotation Action Class
+class AnnotationAction {
+  final Annotation annotation;
+  final AnnotationType type;
+  final bool isAdd;
+  final List<PdfTextMarkupAnnotation> pdfAnnotation;
+
+  AnnotationAction(
+    this.annotation,
+    this.type,
+    this.pdfAnnotation, {
+    this.isAdd = true,
+  });
+}
+
 class TextBox {
   String text;
   Offset position;
   double width;
   double height;
   double fontSize;
+  Color? color;
 
   TextBox(
     this.text,
@@ -648,6 +849,7 @@ class TextBox {
     this.width = 100,
     this.height = 50,
     this.fontSize = 12,
+    this.color,
   });
 }
 
