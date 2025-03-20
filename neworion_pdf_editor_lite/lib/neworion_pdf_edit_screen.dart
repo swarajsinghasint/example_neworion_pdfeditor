@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   final ImageController _imageController = ImageController();
   Color _highlightColor = Colors.yellow;
   Color _underlineColor = Colors.green;
+  DrawingMode selectedMode = DrawingMode.none;
 
   @override
   void initState() {
@@ -140,16 +142,37 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               (MediaQuery.of(context).size.width *
                   1.414); // Aspect ratio correction
 
-          // Corrected position and dimensions
+          // Corrected position and dimensions with scaling
           double scaledX = imageBox.position.dx * scaleFactorX;
           double scaledY = imageBox.position.dy * scaleFactorY;
           double scaledWidth = imageBox.width * scaleFactorX;
           double scaledHeight = imageBox.height * scaleFactorY;
 
+          // ✅ Save the current graphics state
+          page.graphics.save();
+
+          // ✅ Apply translation and rotation correctly
+          page.graphics.translateTransform(
+            scaledX + scaledWidth / 2,
+            scaledY + scaledHeight / 2,
+          );
+
+          // ✅ Apply rotation (in degrees, converted to radians)
+          page.graphics.rotateTransform(imageBox.rotation * (180 / pi));
+
+          // ✅ Draw the rotated image with corrected bounds
           page.graphics.drawImage(
             pdfImage,
-            Rect.fromLTWH(scaledX, scaledY, scaledWidth, scaledHeight),
+            Rect.fromLTWH(
+              -scaledWidth / 2, // Move to center before drawing
+              -scaledHeight / 2,
+              scaledWidth,
+              scaledHeight,
+            ),
           );
+
+          // ✅ Restore original graphics state
+          page.graphics.restore();
         }
 
         // ✅ Draw text boxes on the PDF
@@ -360,6 +383,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                             textBoxController: _textBoxController,
                             imageController: _imageController,
                             currentPage: _currentPage,
+                            selectedMode: selectedMode,
                             callback: () {
                               setState(() {});
                             },
@@ -605,6 +629,12 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     label: "Add Image",
   );
 
+  void _changeMode(DrawingMode mode) {
+    setState(() {
+      selectedMode = mode;
+    });
+  }
+
   Widget _buildBottomNavItem(IconData icon, String label, int index) {
     final bool isSelected = _selectedIndex == index;
 
@@ -615,6 +645,26 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             _selectedIndex = -1;
           } else {
             _selectedIndex = index;
+          }
+          switch (index) {
+            case 0:
+              _changeMode(DrawingMode.draw);
+              break;
+            case 1:
+              _changeMode(DrawingMode.text);
+              break;
+            case 2:
+              _changeMode(DrawingMode.highlight);
+              break;
+            case 3:
+              _changeMode(DrawingMode.underline);
+              break;
+            case 4:
+              _changeMode(DrawingMode.image);
+              break;
+            default:
+              _changeMode(DrawingMode.none);
+              break;
           }
         });
       },
@@ -640,11 +690,14 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }
 }
 
+enum DrawingMode { none, draw, text, image, highlight, underline }
+
 class DrawingCanvas extends StatefulWidget {
   final DrawingController drawingController;
   final TextBoxController textBoxController;
   final ImageController imageController;
   final int currentPage;
+  final DrawingMode selectedMode;
   final VoidCallback callback;
 
   const DrawingCanvas({
@@ -652,6 +705,7 @@ class DrawingCanvas extends StatefulWidget {
     required this.textBoxController,
     required this.imageController,
     required this.currentPage,
+    required this.selectedMode,
     required this.callback,
   });
 
@@ -704,24 +758,38 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onPanStart:
-          (details) =>
-              widget.drawingController.startDraw(details.localPosition),
-      onPanUpdate:
-          (details) => widget.drawingController.drawing(details.localPosition),
-      onPanEnd: (details) => widget.callback(),
+      onPanStart: (details) {
+        if (widget.selectedMode == DrawingMode.draw) {
+          widget.drawingController.startDraw(details.localPosition);
+        }
+      },
+      onPanUpdate: (details) {
+        if (widget.selectedMode == DrawingMode.draw) {
+          widget.drawingController.drawing(details.localPosition);
+        }
+      },
+      onPanEnd: (details) {
+        if (widget.selectedMode == DrawingMode.draw) {
+          widget.callback();
+        }
+      },
       onTapUp: (details) {
-        widget.textBoxController.selectTextBox(details.localPosition);
+        if (widget.selectedMode == DrawingMode.text) {
+          widget.textBoxController.selectTextBox(details.localPosition);
+        }
       },
       child: Stack(
         children: [
           ...widget.imageController.getImageBoxes().map(_buildImageWidget),
-          ClipRect(
-            child: RepaintBoundary(
-              key: widget.drawingController.painterKey,
-              child: CustomPaint(
-                painter: DrawingPainter(controller: widget.drawingController),
-                size: Size.infinite,
+          IgnorePointer(
+            ignoring: widget.selectedMode != DrawingMode.draw,
+            child: ClipRect(
+              child: RepaintBoundary(
+                key: widget.drawingController.painterKey,
+                child: CustomPaint(
+                  painter: DrawingPainter(controller: widget.drawingController),
+                  size: Size.infinite,
+                ),
               ),
             ),
           ),
@@ -833,23 +901,35 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       left: imageBox.position.dx,
       top: imageBox.position.dy,
       child: GestureDetector(
-        // ✅ Handle drag and scale with one recognizer
         onScaleUpdate: (details) {
-          setState(() {
-            // ✅ Update position
-            imageBox.position += details.focalPointDelta;
+          if (widget.selectedMode == DrawingMode.image) {
+            setState(() {
+              // ✅ Update position
+              imageBox.position += details.focalPointDelta;
 
-            // ✅ Update scale (pinch zoom)
-            if (details.scale != 1.0) {
-              imageBox.width *= details.scale;
-              imageBox.height *= details.scale;
-            }
-          });
+              // ✅ Update scale (pinch zoom)
+              if (details.scale != 1.0) {
+                imageBox.width *= details.scale;
+                imageBox.height *= details.scale;
+              }
+
+              // ✅ Update rotation
+              imageBox.rotation += details.rotation;
+            });
+          }
         },
-        child: SizedBox(
-          width: imageBox.width,
-          height: imageBox.height,
-          child: CustomPaint(painter: ImagePainter(imageBox)),
+        child: Transform(
+          transform:
+              Matrix4.identity()
+                ..translate(imageBox.width / 2, imageBox.height / 2)
+                ..rotateZ(imageBox.rotation)
+                ..translate(-imageBox.width / 2, -imageBox.height / 2),
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: imageBox.width,
+            height: imageBox.height,
+            child: CustomPaint(painter: ImagePainter(imageBox)),
+          ),
         ),
       ),
     );

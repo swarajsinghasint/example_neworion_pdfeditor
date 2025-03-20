@@ -8,7 +8,7 @@ class ImageController extends ChangeNotifier {
   int _currentPage = 0;
   // Get images for the current page
   List<ImageBox> getImageBoxes() => _imageBoxes[_currentPage] ?? [];
-  Map<int, List<ImageBox>>  getAllImageBoxes() => _imageBoxes;
+  Map<int, List<ImageBox>> getAllImageBoxes() => _imageBoxes;
 
   // Set current page
   void setPage(int page) {
@@ -87,19 +87,19 @@ class ImageController extends ChangeNotifier {
 
 // ✅ Image Box Class
 class ImageBox {
-  ui.Image image;
   Offset position;
   double width;
   double height;
+  ui.Image image;
+  double rotation; // ✅ New rotation field
 
   ImageBox({
-    required this.image,
     required this.position,
-    this.width = 100,
-    this.height = 100,
+    required this.width,
+    required this.height,
+    required this.image,
+    this.rotation = 0.0, // ✅ Default rotation
   });
-
-  Rect get rect => Rect.fromLTWH(position.dx, position.dy, width, height);
 }
 
 // ✅ Image Action for Undo/Redo
