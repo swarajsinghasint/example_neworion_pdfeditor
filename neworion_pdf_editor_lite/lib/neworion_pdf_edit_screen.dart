@@ -76,6 +76,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         // Delay to allow page change to complete
         await Future.delayed(const Duration(milliseconds: 200));
 
+        // Get drawing data as image and add it to the PDF
         ByteData? imageData = await _drawingController.getImageData(i + 1);
         if (imageData != null) {
           PdfPage page = pdfDoc.pages[i];
@@ -91,6 +92,29 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             Rect.fromLTWH(0, 0, pageWidth, pageHeight),
           );
         }
+
+        // ✅ Draw text boxes on the PDF
+        for (var textBox in _drawingController.getAllTextBoxes()[i + 1] ?? []) {
+          PdfPage page = pdfDoc.pages[i];
+
+          final double scaleFactorX =
+              page.getClientSize().width / MediaQuery.of(context).size.width;
+          final double scaleFactorY =
+              page.getClientSize().height /
+              (MediaQuery.of(context).size.width * 1.414);
+
+          // Draw text on the page
+          page.graphics.drawString(
+            textBox.text,
+            PdfStandardFont(PdfFontFamily.helvetica, textBox.fontSize),
+            bounds: Rect.fromLTWH(
+              textBox.position.dx * scaleFactorX,
+              textBox.position.dy * scaleFactorY,
+              textBox.width * scaleFactorX,
+              textBox.height * scaleFactorY,
+            ),
+          );
+        }
       }
 
       // Save updated PDF
@@ -103,7 +127,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       // Open the saved PDF
       OpenFile.open(savedPath);
     } catch (e) {
-      debugPrint('Error while saving drawing: $e');
+      debugPrint('Error while saving drawing and text: $e');
     }
   }
 
@@ -179,171 +203,41 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             ),
           ),
 
-          Container(
-            color: Colors.black,
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Center(
-                    child: Text(
-                      'Page $_currentPage of $_totalPages',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Previous Button
-                    Opacity(
-                      opacity: _currentPage > 1 ? 1.0 : 0.5,
-                      child: TextButton(
-                        onPressed: _currentPage > 1 ? _goToPreviousPage : null,
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.arrow_back_ios, color: Colors.white),
-                            SizedBox(width: 4),
-                            Text(
-                              'Previous',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Next Button
-                    Opacity(
-                      opacity: _currentPage < _totalPages ? 1.0 : 0.5,
-                      child: TextButton(
-                        onPressed:
-                            _currentPage < _totalPages ? _goToNextPage : null,
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Row(
-                          children: const [
-                            Text('Next', style: TextStyle(color: Colors.white)),
-                            SizedBox(
-                              width: 4,
-                            ), // Small spacing between text and icon
-                            Icon(Icons.arrow_forward_ios, color: Colors.white),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.undo,
-                    color:
-                        _drawingController.hasContent()
-                            ? Colors.white
-                            : Colors.grey[700],
-                  ),
-                  onPressed:
-                      _drawingController.hasContent()
-                          ? () {
-                            _drawingController.undo();
-                            setState(() {});
-                          }
-                          : null,
-                ),
-                if (_selectedIndex != -1)
-                  IconButton(
-                    icon: Icon(
-                      Icons.color_lens,
-                      color: _drawingController.getCurrentColor,
-                    ),
-                    onPressed: _selectColor,
-                  ),
-
-                if (_selectedIndex == 1)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: TextButton.icon(
-                      onPressed: () {
-                        _drawingController.addTextBox();
-                        setState(() {});
-                      },
-                      label: Text(
-                        "Add Text",
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      icon: Icon(Icons.text_fields),
-                    ),
-                  ),
-                if (_selectedIndex == 0)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: TextButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('You can draw on the PDF page'),
-                          ),
-                        );
-                      },
-                      label: Text(
-                        "Add Drawing",
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      icon: Icon(Icons.draw, color: Colors.white, size: 30),
-                    ),
-                  ),
-
-                if (_selectedIndex != -1)
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.white),
-                    onPressed: () {
-                      setState(() {
-                        _selectedIndex = -1;
-                      });
-                    },
-                  ),
-                IconButton(
-                  icon: Icon(
-                    Icons.redo,
-                    color:
-                        _drawingController.hasContent(isRedo: true)
-                            ? Colors.white
-                            : Colors.grey[700],
-                  ),
-                  onPressed:
-                      _drawingController.hasContent(isRedo: true)
-                          ? () {
-                            _drawingController.redo();
-                            setState(() {});
-                          }
-                          : null,
-                ),
-              ],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                onPressed: _goToPreviousPage,
+              ),
+              IconButton(
+                icon: const Icon(Icons.undo, color: Colors.white),
+                onPressed: () {
+                  _drawingController.undo();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.redo, color: Colors.white),
+                onPressed: () {
+                  _drawingController.redo();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.color_lens, color: Colors.white),
+                onPressed: _selectColor,
+              ),
+              IconButton(
+                icon: const Icon(Icons.add, color: Colors.white),
+                onPressed: () {
+                  _drawingController.addTextBox();
+                  setState(() {});
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+                onPressed: _goToNextPage,
+              ),
+            ],
           ),
         ],
       ),
@@ -600,8 +494,17 @@ class DrawingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addTextBox() {
+    _textBoxes[_currentPage] ??= [];
+    TextBox newTextBox = TextBox("New Text", Offset(100, 100));
+    _textBoxes[_currentPage]!.add(newTextBox);
+    _history[_currentPage]!.add(TextBoxAction(newTextBox, isAdd: true));
+    notifyListeners();
+  }
+
   void removeTextBox(TextBox textBox) {
     _textBoxes[_currentPage]?.remove(textBox);
+    _history[_currentPage]!.add(TextBoxAction(textBox, isAdd: false));
     notifyListeners();
   }
 
@@ -642,22 +545,42 @@ class DrawingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addTextBox() {
-    _textBoxes[_currentPage] ??= [];
-    _textBoxes[_currentPage]!.add(TextBox("New Text", Offset(100, 100)));
-    notifyListeners();
-  }
-
   void undo() {
     if (_history[_currentPage]?.isNotEmpty == true) {
-      _undoStack[_currentPage]!.add(_history[_currentPage]!.removeLast());
+      var lastAction = _history[_currentPage]!.removeLast();
+      _undoStack[_currentPage]!.add(lastAction);
+
+      if (lastAction is SimpleLine) {
+        // Handle drawing undo
+        notifyListeners();
+      } else if (lastAction is TextBoxAction) {
+        // Handle text box undo
+        if (lastAction.isAdd) {
+          _textBoxes[_currentPage]?.remove(lastAction.textBox);
+        } else {
+          _textBoxes[_currentPage]?.add(lastAction.textBox);
+        }
+      }
       notifyListeners();
     }
   }
 
   void redo() {
     if (_undoStack[_currentPage]?.isNotEmpty == true) {
-      _history[_currentPage]!.add(_undoStack[_currentPage]!.removeLast());
+      var lastAction = _undoStack[_currentPage]!.removeLast();
+      _history[_currentPage]!.add(lastAction);
+
+      if (lastAction is SimpleLine) {
+        // Redo drawing
+        notifyListeners();
+      } else if (lastAction is TextBoxAction) {
+        // Redo text box
+        if (lastAction.isAdd) {
+          _textBoxes[_currentPage]?.add(lastAction.textBox);
+        } else {
+          _textBoxes[_currentPage]?.remove(lastAction.textBox);
+        }
+      }
       notifyListeners();
     }
   }
@@ -726,6 +649,21 @@ class TextBox {
     this.height = 50,
     this.fontSize = 12,
   });
+}
+
+class TextBoxAction extends PaintContent {
+  final TextBox textBox;
+  final bool isAdd;
+
+  TextBoxAction(this.textBox, {required this.isAdd});
+
+  @override
+  void paintOnCanvas(Canvas canvas) {
+    // No painting required for undo/redo actions
+  }
+
+  @override
+  void update(Offset newPoint) {}
 }
 
 abstract class PaintContent {
