@@ -500,6 +500,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     required VoidCallback onAdd,
     required IconData addIcon,
     required String label,
+    Color centerBtnColor = Colors.transparent,
+    PdfViewerController? pdfController, // <-- Pass pdfController if required
   }) {
     return Container(
       padding: const EdgeInsets.all(5.0),
@@ -513,7 +515,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             onPressed:
                 controller.hasContent()
                     ? () {
-                      controller.undo();
+                      if (controller is AnnotationController) {
+                        controller.undo(
+                          pdfController!,
+                        ); // ✅ Correct for annotations
+                      } else {
+                        controller.undo(); // ✅ For other controllers
+                      }
                       setState(() {});
                     }
                     : null,
@@ -524,15 +532,33 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             onPressed:
                 controller.hasContent(isRedo: true)
                     ? () {
-                      controller.redo();
+                      if (controller is AnnotationController) {
+                        controller.redo(
+                          pdfController!,
+                        ); // ✅ Correct for annotations
+                      } else {
+                        controller.redo(); // ✅ For other controllers
+                      }
                       setState(() {});
                     }
                     : null,
           ),
-          _buildActionButton(onPressed: onAdd, icon: addIcon, label: label),
-          IconButton(
-            icon: const Icon(Icons.refresh_outlined, color: Colors.white),
-            onPressed: selectColor,
+          _buildActionButton(
+            onPressed: onAdd,
+            icon: addIcon,
+            label: label,
+            centerBtnColor: centerBtnColor,
+          ),
+          _buildUndoRedoButton(
+            icon: Icons.refresh_outlined,
+            enabled: controller.hasClearContent(),
+            onPressed:
+                controller.hasClearContent()
+                    ? () {
+                      controller.clear();
+                      setState(() {});
+                    }
+                    : null,
           ),
           IconButton(
             icon: const Icon(Icons.check, color: Colors.white, size: 30),
@@ -564,9 +590,11 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     required VoidCallback onPressed,
     required IconData icon,
     required String label,
+    Color centerBtnColor = Colors.transparent,
   }) {
     return Container(
       decoration: BoxDecoration(
+        color: centerBtnColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white),
       ),
@@ -593,12 +621,25 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     },
     addIcon: Icons.draw,
     label: "Add Drawing",
+    centerBtnColor: _drawingController.getCurrentColor,
   );
 
   // ✅ Text Option
   Widget textOption() => buildOptionRow(
     controller: _textBoxController,
-    onAdd: () => _textBoxController.addTextBox(),
+    onAdd: () async {
+      var textBox = _textBoxController.addTextBox();
+      if (textBox == null) return;
+      Map<String, dynamic>? result = await showTextEditDialog(context, textBox);
+
+      if (result != null) {
+        setState(() {
+          textBox.text = result["text"] as String;
+          textBox.fontSize = result["fontSize"] as double;
+          textBox.color = result["color"] as Color;
+        });
+      }
+    },
     addIcon: Icons.text_fields,
     label: "Add Text",
   );
@@ -609,14 +650,16 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     onAdd: () => _annotateText(true),
     addIcon: Icons.highlight,
     label: "Highlight",
+    pdfController: _pdfViewerController, // ✅ Pass PdfViewerController
   );
 
-  // ✅ Underline Option
+  // ✅ Underline Option with PdfViewerController
   Widget underlineOption() => buildOptionRow(
     controller: _annotationController,
     onAdd: () => _annotateText(false),
     addIcon: Icons.format_underline,
     label: "Underline",
+    pdfController: _pdfViewerController, // ✅ Pass PdfViewerController
   );
 
   // ✅ Image Option
@@ -809,7 +852,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                   if (widget.selectedMode != DrawingMode.text) {
                     return;
                   }
-                  Map<String, dynamic>? result = await _showTextEditDialog(
+                  Map<String, dynamic>? result = await showTextEditDialog(
                     context,
                     textBox,
                   );
@@ -845,52 +888,54 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                       ),
                     ),
                     // Cross Icon to Remove Text Box
-                    Positioned(
-                      right: -0, // Positioned correctly to avoid overlap
-                      top: -0,
-                      child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            widget.textBoxController.removeTextBox(textBox);
-                          });
-                        },
-                        child: const CircleAvatar(
-                          backgroundColor: Colors.red,
-                          radius: 10,
-                          child: Icon(
-                            Icons.close,
-                            size: 12,
-                            color: Colors.white,
+                    if (widget.selectedMode == DrawingMode.text)
+                      Positioned(
+                        right: -0, // Positioned correctly to avoid overlap
+                        top: -0,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              widget.textBoxController.removeTextBox(textBox);
+                            });
+                          },
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.red,
+                            radius: 10,
+                            child: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     // Resize Icon at Bottom Right
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: GestureDetector(
-                        onPanUpdate: (details) {
-                          setState(() {
-                            textBox.width += details.delta.dx;
-                            textBox.height += details.delta.dy;
-                          }); // Prevent negative width/height
-                          textBox.width = textBox.width.clamp(
-                            20,
-                            double.infinity,
-                          );
-                          textBox.height = textBox.height.clamp(
-                            20,
-                            double.infinity,
-                          );
-                        },
-                        child: const Icon(
-                          Icons.open_with,
-                          size: 16,
-                          color: Colors.blue,
+                    if (widget.selectedMode == DrawingMode.text)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onPanUpdate: (details) {
+                            setState(() {
+                              textBox.width += details.delta.dx;
+                              textBox.height += details.delta.dy;
+                            }); // Prevent negative width/height
+                            textBox.width = textBox.width.clamp(
+                              20,
+                              double.infinity,
+                            );
+                            textBox.height = textBox.height.clamp(
+                              20,
+                              double.infinity,
+                            );
+                          },
+                          child: const Icon(
+                            Icons.open_with,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -937,18 +982,6 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
           ),
         ),
       ),
-    );
-  }
-
-  Future<Map<String, dynamic>?> _showTextEditDialog(
-    BuildContext context,
-    TextBox textBox,
-  ) async {
-    return showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) {
-        return TexteditingboxContent(textBox: textBox);
-      },
     );
   }
 }

@@ -130,6 +130,19 @@ class DrawingController extends ChangeNotifier {
         _textBoxes[_currentPage]?.isNotEmpty == true;
   }
 
+  bool hasClearContent() {
+    return _history[_currentPage]?.isNotEmpty == true ||
+        _textBoxes[_currentPage]?.isNotEmpty == true ||
+        _undoStack[_currentPage]?.isNotEmpty == true;
+  }
+
+  void clear() {
+    _history[_currentPage] = [];
+    _undoStack[_currentPage] = [];
+    _textBoxes[_currentPage] = [];
+    notifyListeners();
+  }
+
   Future<ByteData?> getImageData(int page) async {
     try {
       final RenderRepaintBoundary boundary =

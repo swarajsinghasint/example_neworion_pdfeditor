@@ -83,6 +83,12 @@ class ImageController extends ChangeNotifier {
     _undoStack[_currentPage]?.clear();
     notifyListeners();
   }
+
+  bool hasClearContent() {
+    return _history[_currentPage]?.isNotEmpty == true ||
+        _imageBoxes[_currentPage]?.isNotEmpty == true ||
+        _undoStack[_currentPage]?.isNotEmpty == true;
+  }
 }
 
 // ✅ Image Box Class

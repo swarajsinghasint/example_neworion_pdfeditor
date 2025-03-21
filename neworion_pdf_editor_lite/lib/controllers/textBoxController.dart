@@ -19,12 +19,13 @@ class TextBoxController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addTextBox() {
+  TextBox? addTextBox() {
     _textBoxes[_currentPage] ??= [];
     TextBox newTextBox = TextBox("New Text", Offset(100, 100));
     _textBoxes[_currentPage]!.add(newTextBox);
     _history[_currentPage]!.add(TextBoxAction(newTextBox, isAdd: true));
     notifyListeners();
+    return newTextBox;
   }
 
   void removeTextBox(TextBox textBox) {
@@ -102,6 +103,18 @@ class TextBoxController extends ChangeNotifier {
         ? _undoStack[_currentPage]?.isNotEmpty == true
         : _history[_currentPage]?.isNotEmpty == true ||
             _textBoxes[_currentPage]?.isNotEmpty == true;
+  }
+
+  void clear() {
+    _textBoxes[_currentPage] = [];
+    _history[_currentPage] = [];
+    _undoStack[_currentPage] = [];
+    notifyListeners();
+  }
+  bool hasClearContent() {
+    return _history[_currentPage]?.isNotEmpty == true ||
+        _textBoxes[_currentPage]?.isNotEmpty == true ||
+        _undoStack[_currentPage]?.isNotEmpty == true;
   }
 }
 

@@ -49,6 +49,11 @@ class AnnotationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool hasClearContent() {
+    return _annotationHistory[_currentPage]?.isNotEmpty == true ||
+        _annotationUndoStack[_currentPage]?.isNotEmpty == true;
+  }
+
   bool hasContent({bool isRedo = false}) {
     return isRedo
         ? _annotationUndoStack[_currentPage]?.isNotEmpty == true

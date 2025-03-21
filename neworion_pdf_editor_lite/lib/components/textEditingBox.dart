@@ -1,7 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
-import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart' as OPdf;
+import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart'
+    as OPdf;
 
+Future<Map<String, dynamic>?> showTextEditDialog(
+  BuildContext context,
+  OPdf.TextBox textBox,
+) async {
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) {
+      return TexteditingboxContent(textBox: textBox);
+    },
+  );
+}
 
 class TexteditingboxContent extends StatefulWidget {
   const TexteditingboxContent({super.key, required this.textBox});
