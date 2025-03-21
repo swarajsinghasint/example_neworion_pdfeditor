@@ -10,8 +10,10 @@ import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
 import 'package:neworion_pdf_editor_lite/components/textEditingBox.dart';
 import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/highlightController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/underlineController.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -33,15 +35,17 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   int _currentPage = 1;
   int _totalPages = 1;
   List<Offset?> _points = [];
-  bool _isDrawing = false;
   bool _isPageLoaded = false;
   final DrawingController _drawingController = DrawingController();
-  final AnnotationController _annotationController = AnnotationController();
+  final HighlightController _highlightController = HighlightController();
+  final UnderlineController _underlineController = UnderlineController();
   final TextBoxController _textBoxController = TextBoxController();
   final ImageController _imageController = ImageController();
   Color _highlightColor = Colors.yellow;
   Color _underlineColor = Colors.green;
   DrawingMode selectedMode = DrawingMode.none;
+  bool isTextSelected = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -102,6 +106,10 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
   Future<void> _saveDrawing() async {
     try {
+      setState(() {
+        _isSaving = true; // Start loader
+      });
+
       final pdfDoc = PdfDocument(
         inputBytes: await widget.pdfFile.readAsBytes(),
       );
@@ -217,7 +225,17 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
         // ✅ Add Annotations (Highlight/Underline)
         for (AnnotationAction action
-            in _annotationController.getAnnotationHistory[i + 1] ?? []) {
+            in _highlightController.getHighlightHistory[i + 1] ?? []) {
+          if (action.isAdd) {
+            for (int j = 0; j < action.pdfAnnotation.length; j++) {
+              if (i < pdfDoc.pages.count) {
+                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
+              }
+            }
+          }
+        }
+        for (AnnotationAction action
+            in _underlineController.getUnderlineHistory[i + 1] ?? []) {
           if (action.isAdd) {
             for (int j = 0; j < action.pdfAnnotation.length; j++) {
               if (i < pdfDoc.pages.count) {
@@ -235,11 +253,21 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       await file.writeAsBytes(await pdfDoc.save());
       pdfDoc.dispose();
 
+      popWithResult(file); // Return saved file to previous screen
+
       // Open the saved PDF
-      OpenFile.open(savedPath);
+      // OpenFile.open(savedPath);
     } catch (e) {
       debugPrint('Error while saving drawing and text: $e');
+    } finally {
+      setState(() {
+        _isSaving = false; // Stop loader
+      });
     }
+  }
+
+  popWithResult(File? file) {
+    Navigator.pop(context, file);
   }
 
   Future<void> _annotateText(bool isHighlight) async {
@@ -285,14 +313,23 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       }
 
       _pdfViewerController.addAnnotation(displayAnnotation);
-      _annotationController.addAnnotation(
-        AnnotationAction(
-          displayAnnotation,
-          isHighlight ? AnnotationType.highlight : AnnotationType.underline,
-          pdfAnnotations,
-          isAdd: true,
-        ),
-      );
+      isHighlight
+          ? _highlightController.addAnnotation(
+            AnnotationAction(
+              displayAnnotation,
+              isHighlight ? AnnotationType.highlight : AnnotationType.underline,
+              pdfAnnotations,
+              isAdd: true,
+            ),
+          )
+          : _underlineController.addAnnotation(
+            AnnotationAction(
+              displayAnnotation,
+              isHighlight ? AnnotationType.highlight : AnnotationType.underline,
+              pdfAnnotations,
+              isAdd: true,
+            ),
+          );
     }
   }
 
@@ -312,175 +349,256 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     }
   }
 
+  Widget getAppBarContent() {
+    switch (_selectedIndex) {
+      case 0:
+        return drawOption();
+      case 1:
+        return textOption();
+      case 2:
+        return highlightOption();
+      case 3:
+        return underlineOption();
+      case 4:
+        return imageOption();
+      default:
+        return Container();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('PDF Editor'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: _saveDrawing,
-            icon: const Icon(Icons.save),
-            tooltip: 'Save',
-          ),
-        ],
-      ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            children: [
-              SizedBox(
-                height: MediaQuery.of(context).size.width * 1.414,
-                width: MediaQuery.of(context).size.width,
-                child: Stack(
-                  children: [
-                    SfPdfViewer.file(
-                      key: _pdfViewerKey,
-                      widget.pdfFile,
-                      controller: _pdfViewerController,
-                      pageLayoutMode: PdfPageLayoutMode.single,
-                      scrollDirection: PdfScrollDirection.horizontal,
-                      canShowScrollHead: false,
-                      canShowPaginationDialog: false,
-                      canShowTextSelectionMenu: false,
-                      pageSpacing: 0,
-                      maxZoomLevel: 1,
-                      onDocumentLoaded: (details) {
-                        setState(() {
-                          _totalPages = details.document.pages.count;
-                          _isPageLoaded = true; // Set page loaded to true
-                        });
-                        _annotationController.setPage(_currentPage);
-                      },
-                      onPageChanged: (details) {
-                        setState(() {
-                          _currentPage = details.newPageNumber;
-                          _isPageLoaded = false; // Reset until page fully loads
-                        });
-                        _drawingController.setPage(_currentPage);
-                        _annotationController.setPage(_currentPage);
-                        Future.delayed(const Duration(milliseconds: 400), () {
-                          setState(() {
-                            _isPageLoaded =
-                                true; // Set after delay to allow rendering
-                          });
-                        });
-                      },
+      appBar:
+          _selectedIndex != -1
+              ? null
+              : AppBar(
+                actions: [
+                  TextButton.icon(
+                    onPressed: _saveDrawing,
+                    icon: const Icon(Icons.save, color: Colors.white, size: 20),
+
+                    label: const Text(
+                      'Save',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
                     ),
-                    Positioned.fill(
-                      child: Opacity(
-                        opacity: _isPageLoaded ? 1 : 0,
-                        child: IgnorePointer(
-                          ignoring:
-                              _selectedIndex != 0 &&
-                              _selectedIndex != 1 &&
-                              _selectedIndex != 4,
-                          child: DrawingCanvas(
-                            drawingController: _drawingController,
-                            textBoxController: _textBoxController,
-                            imageController: _imageController,
-                            currentPage: _currentPage,
-                            selectedMode: selectedMode,
-                            callback: () {
-                              setState(() {});
+                  ),
+                ],
+                leading: IconButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                automaticallyImplyLeading: false,
+                title: getAppBarContent(),
+                backgroundColor: Colors.black,
+                centerTitle:
+                    true, // Avoid centering when row has multiple elements
+              ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width * 1.414,
+                    width: MediaQuery.of(context).size.width,
+                    child: Stack(
+                      children: [
+                        Opacity(
+                          opacity: _isSaving ? 0 : 1,
+                          child: SfPdfViewer.file(
+                            key: _pdfViewerKey,
+                            widget.pdfFile,
+                            controller: _pdfViewerController,
+                            pageLayoutMode: PdfPageLayoutMode.single,
+                            scrollDirection: PdfScrollDirection.horizontal,
+                            canShowScrollHead: false,
+                            canShowPaginationDialog: false,
+                            canShowTextSelectionMenu: false,
+                            pageSpacing: 0,
+                            maxZoomLevel: 1,
+                            onTextSelectionChanged: (details) {
+                              setState(() {
+                                if (details.selectedText != null) {
+                                  isTextSelected = true;
+                                } else {
+                                  isTextSelected = false;
+                                }
+                              });
+                            },
+                            onDocumentLoaded: (details) {
+                              setState(() {
+                                _totalPages = details.document.pages.count;
+                                _isPageLoaded = true; // Set page loaded to true
+                              });
+                              _highlightController.setPage(_currentPage);
+                              _underlineController.setPage(_currentPage);
+                            },
+                            onPageChanged: (details) {
+                              setState(() {
+                                _currentPage = details.newPageNumber;
+                                _isPageLoaded =
+                                    false; // Reset until page fully loads
+                              });
+                              _drawingController.setPage(_currentPage);
+                              _highlightController.setPage(_currentPage);
+                              _underlineController.setPage(_currentPage);
+                              Future.delayed(
+                                const Duration(milliseconds: 400),
+                                () {
+                                  setState(() {
+                                    _isPageLoaded =
+                                        true; // Set after delay to allow rendering
+                                  });
+                                },
+                              );
                             },
                           ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                color: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Center(
-                        child: Text(
-                          'Page $_currentPage of $_totalPages',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Previous Button
-                        Opacity(
-                          opacity: _currentPage > 1 ? 1.0 : 0.5,
-                          child: TextButton(
-                            onPressed:
-                                _currentPage > 1 ? _goToPreviousPage : null,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Row(
-                              children: const [
-                                Icon(Icons.arrow_back_ios, color: Colors.white),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Previous',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ],
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity:
+                                _isSaving
+                                    ? 0
+                                    : _isPageLoaded
+                                    ? 1
+                                    : 0,
+                            child: IgnorePointer(
+                              ignoring:
+                                  _selectedIndex != 0 &&
+                                  _selectedIndex != 1 &&
+                                  _selectedIndex != 4,
+                              child: DrawingCanvas(
+                                drawingController: _drawingController,
+                                textBoxController: _textBoxController,
+                                imageController: _imageController,
+                                currentPage: _currentPage,
+                                selectedMode: selectedMode,
+                                callback: () {
+                                  setState(() {});
+                                },
+                              ),
                             ),
                           ),
                         ),
-
-                        // Next Button
-                        Opacity(
-                          opacity: _currentPage < _totalPages ? 1.0 : 0.5,
-                          child: TextButton(
-                            onPressed:
-                                _currentPage < _totalPages
-                                    ? _goToNextPage
-                                    : null,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Row(
-                              children: const [
-                                Text(
-                                  'Next',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                SizedBox(
-                                  width: 4,
-                                ), // Small spacing between text and icon
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Colors.white,
-                                ),
-                              ],
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: _isSaving ? 1 : 0,
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  Container(
+                    color: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Center(
+                            child: Text(
+                              'Page $_currentPage of $_totalPages',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Previous Button
+                            Opacity(
+                              opacity: _currentPage > 1 ? 1.0 : 0.5,
+                              child: TextButton(
+                                onPressed:
+                                    _currentPage > 1 ? _goToPreviousPage : null,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.arrow_back_ios,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Previous',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Next Button
+                            Opacity(
+                              opacity: _currentPage < _totalPages ? 1.0 : 0.5,
+                              child: InkWell(
+                                onTap:
+                                    _currentPage < _totalPages
+                                        ? _goToNextPage
+                                        : null,
+
+                                child: Row(
+                                  children: const [
+                                    Text(
+                                      'Next',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 4,
+                                    ), // Small spacing between text and icon
+                                    Icon(
+                                      Icons.arrow_forward_ios,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              getAppBarContent(),
             ],
           ),
-
-          if (_selectedIndex == 0) drawOption(),
-          if (_selectedIndex == 1) textOption(),
-          if (_selectedIndex == 2) highlightOption(),
-          if (_selectedIndex == 3) underlineOption(),
-          if (_selectedIndex == 4) imageOption(),
-        ],
+        ),
       ),
       bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[900],
+        color: Colors.black,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -505,9 +623,15 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }) {
     return Container(
       padding: const EdgeInsets.all(5.0),
-      color: Colors.grey[900],
+      decoration: BoxDecoration(
+        color: Colors.black,
+        border: Border(
+          top: BorderSide(color: Colors.grey[900]!),
+          bottom: BorderSide(color: Colors.grey[900]!),
+        ),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildUndoRedoButton(
             icon: Icons.undo,
@@ -515,7 +639,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             onPressed:
                 controller.hasContent()
                     ? () {
-                      if (controller is AnnotationController) {
+                      if (controller is HighlightController ||
+                          controller is UnderlineController) {
                         controller.undo(
                           pdfController!,
                         ); // ✅ Correct for annotations
@@ -532,7 +657,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             onPressed:
                 controller.hasContent(isRedo: true)
                     ? () {
-                      if (controller is AnnotationController) {
+                      if (controller is HighlightController ||
+                          controller is UnderlineController) {
                         controller.redo(
                           pdfController!,
                         ); // ✅ Correct for annotations
@@ -560,6 +686,30 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                     }
                     : null,
           ),
+
+          // if (selectedMode == DrawingMode.highlight)
+          //   IconButton(
+          //     icon: Icon(
+          //       Icons.color_lens_outlined,
+          //       color: _highlightColor,
+
+          //       size: 25,
+          //     ),
+          //     onPressed: () {
+          //       _selectAnnotationColor(true);
+          //     },
+          //   ),
+          // if (selectedMode == DrawingMode.underline)
+          //   IconButton(
+          //     icon: Icon(
+          //       Icons.color_lens_outlined,
+          //       color: _underlineColor,
+          //       size: 30,
+          //     ),
+          //     onPressed: () {
+          //       _selectAnnotationColor(false);
+          //     },
+          //   ),
           IconButton(
             icon: const Icon(Icons.check, color: Colors.white, size: 30),
             onPressed: () {
@@ -598,13 +748,9 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white),
       ),
-      child: TextButton.icon(
-        onPressed: onPressed,
-        label: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 10),
-        ),
+      child: IconButton(
         icon: Icon(icon, color: Colors.white, size: 25),
+        onPressed: onPressed,
       ),
     );
   }
@@ -614,10 +760,6 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     controller: _drawingController,
     onAdd: () async {
       await selectColor();
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can draw on the PDF page')),
-      );
     },
     addIcon: Icons.draw,
     label: "Add Drawing",
@@ -646,20 +788,26 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
   // ✅ Highlight Option
   Widget highlightOption() => buildOptionRow(
-    controller: _annotationController,
-    onAdd: () => _annotateText(true),
+    controller: _highlightController,
+    onAdd: () {
+      _annotateText(true);
+    },
     addIcon: Icons.highlight,
     label: "Highlight",
     pdfController: _pdfViewerController, // ✅ Pass PdfViewerController
+    centerBtnColor: isTextSelected ? Colors.amber : Colors.transparent,
   );
 
   // ✅ Underline Option with PdfViewerController
   Widget underlineOption() => buildOptionRow(
-    controller: _annotationController,
-    onAdd: () => _annotateText(false),
+    controller: _underlineController,
+    onAdd: () {
+      _annotateText(false);
+    },
     addIcon: Icons.format_underline,
     label: "Underline",
     pdfController: _pdfViewerController, // ✅ Pass PdfViewerController
+    centerBtnColor: isTextSelected ? Colors.green : Colors.transparent,
   );
 
   // ✅ Image Option
@@ -668,7 +816,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     onAdd: () async {
       await _addImage();
     },
-    addIcon: Icons.image,
+    addIcon: Icons.add_photo_alternate_rounded,
     label: "Add Image",
   );
 
@@ -681,53 +829,58 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   Widget _buildBottomNavItem(IconData icon, String label, int index) {
     final bool isSelected = _selectedIndex == index;
 
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            _selectedIndex = -1;
-          } else {
-            _selectedIndex = index;
-          }
-          switch (index) {
-            case 0:
-              _changeMode(DrawingMode.draw);
-              break;
-            case 1:
-              _changeMode(DrawingMode.text);
-              break;
-            case 2:
-              _changeMode(DrawingMode.highlight);
-              break;
-            case 3:
-              _changeMode(DrawingMode.underline);
-              break;
-            case 4:
-              _changeMode(DrawingMode.image);
-              break;
-            default:
-              _changeMode(DrawingMode.none);
-              break;
-          }
-        });
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isSelected ? Colors.white : Colors.grey,
-            size: isSelected ? 32 : 24,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            if (isSelected) {
+              _selectedIndex = -1;
+            } else {
+              _selectedIndex = index;
+            }
+            switch (index) {
+              case 0:
+                _changeMode(DrawingMode.draw);
+                break;
+              case 1:
+                _changeMode(DrawingMode.text);
+                break;
+              case 2:
+                _changeMode(DrawingMode.highlight);
+                break;
+              case 3:
+                _changeMode(DrawingMode.underline);
+                break;
+              case 4:
+                _changeMode(DrawingMode.image);
+                break;
+              default:
+                _changeMode(DrawingMode.none);
+                break;
+            }
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey,
+                size: isSelected ? 26 : 20,
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
           ),
-          Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.grey,
-              fontSize: isSelected ? 14 : 12,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
