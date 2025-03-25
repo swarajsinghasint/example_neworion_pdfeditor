@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
 import 'package:neworion_pdf_editor_lite/components/textEditingBox.dart';
@@ -15,8 +13,6 @@ import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/savePdfController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/underlineController.dart';
-import 'package:open_file/open_file.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 

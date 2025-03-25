@@ -180,10 +180,10 @@ class SavePdfController extends ChangeNotifier {
       await file.writeAsBytes(await pdfDoc.save());
       pdfDoc.dispose();
 
-      // popWithResult(file); // Return saved file to previous screen
+      Navigator.pop(context, file); // Return saved file to previous screen
 
       // Open the saved PDF
-      OpenFile.open(savedPath);
+      // OpenFile.open(savedPath);
     } catch (e) {
       debugPrint('Error while saving drawing and text: $e');
     } finally {
