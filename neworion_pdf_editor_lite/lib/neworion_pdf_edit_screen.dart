@@ -100,7 +100,6 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     setState(() {});
   }
 
-
   popWithResult(File? file) {
     Navigator.pop(context, file);
   }
@@ -343,174 +342,173 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             SingleChildScrollView(
+              reverse: true,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 mainAxisSize: MainAxisSize.max,
                 children: [
-                  SingleChildScrollView(
-                    child: SizedBox(
-                      height: MediaQuery.of(context).size.width * 1.414,
-                      width: MediaQuery.of(context).size.width,
-                      child: Stack(
-                        children: [
-                          IgnorePointer(
-                            ignoring:
-                                _selectedIndex != -1 &&
-                                _selectedIndex != 2 &&
-                                _selectedIndex != 3,
-                            child: Opacity(
-                              opacity: _isSaving ? 0 : 1,
-                              child: SfPdfViewer.file(
-                                key: _pdfViewerKey,
-                                widget.pdfFile,
-                                controller: _pdfViewerController,
-                                pageLayoutMode: PdfPageLayoutMode.single,
-                                scrollDirection: PdfScrollDirection.horizontal,
-                                canShowScrollHead: false,
-                                canShowPaginationDialog: false,
-                                canShowTextSelectionMenu: false,
-                                pageSpacing: 0,
-                                maxZoomLevel: 1,
-                                onTextSelectionChanged: (details) {
-                                  setState(() {
-                                    if (details.selectedText != null) {
-                                      isTextSelected = true;
-                                    } else {
-                                      isTextSelected = false;
-                                    }
-                                  });
-                                },
-                                onDocumentLoaded: (details) {
-                                  setState(() {
-                                    _totalPages = details.document.pages.count;
-                                    _isPageLoaded =
-                                        true; // Set page loaded to true
-                                  });
-                                  _highlightController.setPage(_currentPage);
-                                  _underlineController.setPage(_currentPage);
-                                },
-                                onPageChanged: (details) {
-                                  setState(() {
-                                    _currentPage = details.newPageNumber;
-                                    _isPageLoaded =
-                                        false; // Reset until page fully loads
-                                  });
-                                  _drawingController.setPage(_currentPage);
-                                  _highlightController.setPage(_currentPage);
-                                  _underlineController.setPage(_currentPage);
-                                  Future.delayed(
-                                    const Duration(milliseconds: 400),
-                                    () {
-                                      setState(() {
-                                        _isPageLoaded =
-                                            true; // Set after delay to allow rendering
-                                      });
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: Opacity(
-                              opacity: !_isPageLoaded || revertView ? 0 : 1,
-
-                              child: IgnorePointer(
-                                ignoring: _selectedIndex == -1,
-                                child: DrawingCanvas(
-                                  drawingController: _drawingController,
-                                  textBoxController: _textBoxController,
-                                  imageController: _imageController,
-                                  currentPage: _currentPage,
-                                  selectedMode: selectedMode,
-                                  callback: () {
-                                    setState(() {});
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: 15,
-
-                            bottom: 15,
-                            child: GestureDetector(
-                              onTapDown: (_) {
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width * 1.414,
+                    width: MediaQuery.of(context).size.width,
+                    child: Stack(
+                      children: [
+                        IgnorePointer(
+                          ignoring:
+                              _selectedIndex != -1 &&
+                              _selectedIndex != 2 &&
+                              _selectedIndex != 3,
+                          child: Opacity(
+                            opacity: _isSaving ? 0 : 1,
+                            child: SfPdfViewer.file(
+                              key: _pdfViewerKey,
+                              widget.pdfFile,
+                              controller: _pdfViewerController,
+                              pageLayoutMode: PdfPageLayoutMode.single,
+                              scrollDirection: PdfScrollDirection.horizontal,
+                              canShowScrollHead: false,
+                              canShowPaginationDialog: false,
+                              canShowTextSelectionMenu: false,
+                              pageSpacing: 0,
+                              maxZoomLevel: 1,
+                              onTextSelectionChanged: (details) {
                                 setState(() {
-                                  revertView = true; // Set to true when tapped
+                                  if (details.selectedText != null) {
+                                    isTextSelected = true;
+                                  } else {
+                                    isTextSelected = false;
+                                  }
                                 });
                               },
-                              onTapCancel: () {
+                              onDocumentLoaded: (details) {
+                                setState(() {
+                                  _totalPages = details.document.pages.count;
+                                  _isPageLoaded =
+                                      true; // Set page loaded to true
+                                });
+                                _highlightController.setPage(_currentPage);
+                                _underlineController.setPage(_currentPage);
+                              },
+                              onPageChanged: (details) {
+                                setState(() {
+                                  _currentPage = details.newPageNumber;
+                                  _isPageLoaded =
+                                      false; // Reset until page fully loads
+                                });
+                                _drawingController.setPage(_currentPage);
+                                _highlightController.setPage(_currentPage);
+                                _underlineController.setPage(_currentPage);
                                 Future.delayed(
-                                  const Duration(milliseconds: 100),
+                                  const Duration(milliseconds: 400),
                                   () {
                                     setState(() {
-                                      revertView = false;
+                                      _isPageLoaded =
+                                          true; // Set after delay to allow rendering
                                     });
                                   },
                                 );
                               },
-                              onTapUp: (_) {
-                                Future.delayed(
-                                  const Duration(milliseconds: 100),
-                                  () {
-                                    setState(() {
-                                      revertView = false;
-                                    });
-                                  },
-                                ); // Reset after tap
-                              },
-                              child: AnimatedContainer(
-                                margin: EdgeInsets.all(8),
-                                duration: const Duration(milliseconds: 200),
-                                decoration: BoxDecoration(
-                                  color:
-                                      revertView
-                                          ? Colors.grey.shade700.withOpacity(
-                                            0.5,
-                                          ) // Active color
-                                          : Colors.grey.withOpacity(
-                                            0.5,
-                                          ), // Inactive color
-                                  borderRadius: BorderRadius.circular(50),
-                                  border: Border.all(
-                                    color:
-                                        revertView
-                                            ? Colors.grey.shade700
-                                            : Colors.grey.shade900,
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(4.0),
-                                child: Icon(
-                                  revertView
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
+                            ),
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: !_isPageLoaded || revertView ? 0 : 1,
 
+                            child: IgnorePointer(
+                              ignoring: _selectedIndex == -1,
+                              child: DrawingCanvas(
+                                drawingController: _drawingController,
+                                textBoxController: _textBoxController,
+                                imageController: _imageController,
+                                currentPage: _currentPage,
+                                selectedMode: selectedMode,
+                                callback: () {
+                                  setState(() {});
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 15,
+
+                          bottom: 15,
+                          child: GestureDetector(
+                            onTapDown: (_) {
+                              setState(() {
+                                revertView = true; // Set to true when tapped
+                              });
+                            },
+                            onTapCancel: () {
+                              Future.delayed(
+                                const Duration(milliseconds: 100),
+                                () {
+                                  setState(() {
+                                    revertView = false;
+                                  });
+                                },
+                              );
+                            },
+                            onTapUp: (_) {
+                              Future.delayed(
+                                const Duration(milliseconds: 100),
+                                () {
+                                  setState(() {
+                                    revertView = false;
+                                  });
+                                },
+                              ); // Reset after tap
+                            },
+                            child: AnimatedContainer(
+                              margin: EdgeInsets.all(8),
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                color:
+                                    revertView
+                                        ? Colors.grey.shade700.withOpacity(
+                                          0.5,
+                                        ) // Active color
+                                        : Colors.grey.withOpacity(
+                                          0.5,
+                                        ), // Inactive color
+                                borderRadius: BorderRadius.circular(50),
+                                border: Border.all(
                                   color:
                                       revertView
                                           ? Colors.grey.shade700
                                           : Colors.grey.shade900,
-                                  size: 20,
                                 ),
+                              ),
+                              padding: const EdgeInsets.all(4.0),
+                              child: Icon(
+                                revertView
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+
+                                color:
+                                    revertView
+                                        ? Colors.grey.shade700
+                                        : Colors.grey.shade900,
+                                size: 20,
                               ),
                             ),
                           ),
-                          if (_isSaving)
-                            Positioned.fill(
-                              child: Opacity(
-                                opacity: _isSaving ? 1 : 0,
-                                child: Container(
-                                  color: Colors.black,
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                    ),
+                        ),
+                        if (_isSaving)
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: _isSaving ? 1 : 0,
+                              child: Container(
+                                color: Colors.black,
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                   Container(
@@ -629,7 +627,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     PdfViewerController? pdfController, // <-- Pass pdfController if required
   }) {
     return Container(
-      padding: const EdgeInsets.all(5.0),
+      padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.black,
         border: Border(

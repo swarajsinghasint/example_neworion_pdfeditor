@@ -28,6 +28,9 @@ class SavePdfController extends ChangeNotifier {
     required UnderlineController underlineController,
     required Function refresh,
   }) async {
+    if (isSaving) {
+      return;
+    }
     try {
       isSaving = true; // Start loader
 
@@ -167,8 +170,13 @@ class SavePdfController extends ChangeNotifier {
 
       // Save updated PDF
       final output = await getTemporaryDirectory();
-      final savedPath = '${output.path}/edited.pdf';
+      final String originalName = pdfFile.path.split('/').last.split('.').first;
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Create new file name with timestamp
+      final String savedPath = '${output.path}/${originalName}_$timestamp.pdf';
       final file = File(savedPath);
+
       await file.writeAsBytes(await pdfDoc.save());
       pdfDoc.dispose();
 
