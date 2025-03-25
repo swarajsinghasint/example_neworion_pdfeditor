@@ -21,11 +21,15 @@ class ImageController extends ChangeNotifier {
 
   // Add image to the current page
   void addImage(ui.Image image) {
+    double aspectRatio = image.width / image.height;
+    double width = 150; // Default width
+    double height = width / aspectRatio;
+
     ImageBox newImageBox = ImageBox(
       image: image,
-      position: Offset(100, 100),
-      width: 150,
-      height: 150,
+      position: const Offset(100, 100),
+      width: width,
+      height: height,
     );
     _imageBoxes[_currentPage]!.add(newImageBox);
     _history[_currentPage]!.add(ImageAction(newImageBox, isAdd: true));
@@ -88,6 +92,14 @@ class ImageController extends ChangeNotifier {
     return _history[_currentPage]?.isNotEmpty == true ||
         _imageBoxes[_currentPage]?.isNotEmpty == true ||
         _undoStack[_currentPage]?.isNotEmpty == true;
+  }
+
+  clearAllPages(){
+    _imageBoxes.clear();
+    _history.clear();
+    _undoStack.clear();
+    setPage(0);
+    notifyListeners();
   }
 }
 

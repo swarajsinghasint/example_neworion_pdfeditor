@@ -60,4 +60,13 @@ class UnderlineController extends ChangeNotifier {
     return _underlineHistory[_currentPage]?.isNotEmpty == true ||
         _underlineUndoStack[_currentPage]?.isNotEmpty == true;
   }
+
+  clearAllPages(PdfViewerController pdfViewerController) {
+    _underlineHistory.clear();
+    _underlineUndoStack.clear();
+    pdfViewerController.removeAllAnnotations();
+
+    setPage(0);
+    notifyListeners();
+  }
 }

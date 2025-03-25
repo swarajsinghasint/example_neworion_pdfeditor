@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
 
-
 class TextBoxController extends ChangeNotifier {
   final Map<int, List<TextBox>> _textBoxes = {};
   final Map<int, List<TextBoxAction>> _history = {};
@@ -111,10 +110,19 @@ class TextBoxController extends ChangeNotifier {
     _undoStack[_currentPage] = [];
     notifyListeners();
   }
+
   bool hasClearContent() {
     return _history[_currentPage]?.isNotEmpty == true ||
         _textBoxes[_currentPage]?.isNotEmpty == true ||
         _undoStack[_currentPage]?.isNotEmpty == true;
+  }
+
+  clearAllPages() {
+    _history.clear();
+    _undoStack.clear();
+    _textBoxes.clear();
+    setPage(0);
+    notifyListeners();
   }
 }
 

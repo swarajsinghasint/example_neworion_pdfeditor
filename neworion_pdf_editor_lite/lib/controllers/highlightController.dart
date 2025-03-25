@@ -61,4 +61,12 @@ class HighlightController extends ChangeNotifier {
     return _highlightHistory[_currentPage]?.isNotEmpty == true ||
         _highlightUndoStack[_currentPage]?.isNotEmpty == true;
   }
+
+  clearAllPages(PdfViewerController pdfViewerController) {
+    _highlightHistory.clear();
+    _highlightUndoStack.clear();
+    pdfViewerController.removeAllAnnotations();
+    setPage(0);
+    notifyListeners();
+  }
 }

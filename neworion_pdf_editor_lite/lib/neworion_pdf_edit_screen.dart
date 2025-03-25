@@ -12,6 +12,7 @@ import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/highlightController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/savePdfController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
 import 'package:neworion_pdf_editor_lite/controllers/underlineController.dart';
 import 'package:open_file/open_file.dart';
@@ -41,11 +42,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   final UnderlineController _underlineController = UnderlineController();
   final TextBoxController _textBoxController = TextBoxController();
   final ImageController _imageController = ImageController();
+  final SavePdfController _savePdfController = SavePdfController();
   Color _highlightColor = Colors.yellow;
   Color _underlineColor = Colors.green;
   DrawingMode selectedMode = DrawingMode.none;
   bool isTextSelected = false;
   bool _isSaving = false;
+  bool revertView = false;
 
   @override
   void initState() {
@@ -97,174 +100,6 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     setState(() {});
   }
 
-  Future<Uint8List> _convertImageToUint8List(ui.Image image) async {
-    final ByteData? byteData = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    return byteData!.buffer.asUint8List();
-  }
-
-  Future<void> _saveDrawing() async {
-    try {
-      setState(() {
-        _isSaving = true; // Start loader
-      });
-
-      final pdfDoc = PdfDocument(
-        inputBytes: await widget.pdfFile.readAsBytes(),
-      );
-
-      for (int i = 0; i < _totalPages; i++) {
-        // Switch page and set drawing for the current page
-        _drawingController.setPage(i + 1);
-        PdfPage page = pdfDoc.pages[i];
-        // Delay to allow page change to complete
-        await Future.delayed(const Duration(milliseconds: 200));
-
-        // Get drawing data as image and add it to the PDF
-        ByteData? imageData = await _drawingController.getImageData(i + 1);
-        if (imageData != null) {
-          final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
-
-          // Get page dimensions
-          final double pageWidth = page.getClientSize().width;
-          final double pageHeight = page.getClientSize().height;
-
-          // Draw the captured image on the respective page
-          page.graphics.drawImage(
-            image,
-            Rect.fromLTWH(0, 0, pageWidth, pageHeight),
-          );
-        }
-
-        // ✅ Add images to PDF
-
-        for (var imageBox in _imageController.getAllImageBoxes()[i + 1] ?? []) {
-          final imgData = await _convertImageToUint8List(imageBox.image);
-          final PdfImage pdfImage = PdfBitmap(imgData);
-
-          final double scaleFactorX =
-              page.getClientSize().width / MediaQuery.of(context).size.width;
-          final double scaleFactorY =
-              page.getClientSize().height /
-              (MediaQuery.of(context).size.width *
-                  1.414); // Aspect ratio correction
-
-          // Corrected position and dimensions with scaling
-          double scaledX = imageBox.position.dx * scaleFactorX;
-          double scaledY = imageBox.position.dy * scaleFactorY;
-          double scaledWidth = imageBox.width * scaleFactorX;
-          double scaledHeight = imageBox.height * scaleFactorY;
-
-          // ✅ Save the current graphics state
-          page.graphics.save();
-
-          // ✅ Apply translation and rotation correctly
-          page.graphics.translateTransform(
-            scaledX + scaledWidth / 2,
-            scaledY + scaledHeight / 2,
-          );
-
-          // ✅ Apply rotation (in degrees, converted to radians)
-          page.graphics.rotateTransform(imageBox.rotation * (180 / pi));
-
-          // ✅ Draw the rotated image with corrected bounds
-          page.graphics.drawImage(
-            pdfImage,
-            Rect.fromLTWH(
-              -scaledWidth / 2, // Move to center before drawing
-              -scaledHeight / 2,
-              scaledWidth,
-              scaledHeight,
-            ),
-          );
-
-          // ✅ Restore original graphics state
-          page.graphics.restore();
-        }
-
-        // ✅ Draw text boxes on the PDF
-        for (TextBox textBox
-            in _textBoxController.getAllTextBoxes()[i + 1] ?? []) {
-          final double scaleFactorX =
-              page.getClientSize().width / MediaQuery.of(context).size.width;
-          final double scaleFactorY =
-              page.getClientSize().height /
-              (MediaQuery.of(context).size.width *
-                  1.414); // Adjust for aspect ratio
-
-          // Properly manage text position with corrected offsets and scaling
-          double scaledX = textBox.position.dx * scaleFactorX;
-          double scaledY = textBox.position.dy * scaleFactorY;
-          double scaledWidth = textBox.width * scaleFactorX;
-          double scaledHeight = textBox.height * scaleFactorY;
-
-          // Draw text with corrected bounds and alignment
-          page.graphics.drawString(
-            textBox.text,
-            PdfStandardFont(PdfFontFamily.helvetica, textBox.fontSize),
-            brush: PdfSolidBrush(
-              PdfColor(
-                textBox.color?.red ?? 0,
-                textBox.color?.green ?? 0,
-                textBox.color?.blue ?? 0,
-              ),
-            ),
-            bounds: Rect.fromLTWH(
-              scaledX + 10, // Added padding to avoid edge cutoff
-              scaledY + 10,
-              scaledWidth,
-              scaledHeight,
-            ),
-            format: PdfStringFormat(
-              alignment: PdfTextAlignment.center,
-              lineAlignment: PdfVerticalAlignment.middle,
-            ),
-          );
-        }
-
-        // ✅ Add Annotations (Highlight/Underline)
-        for (AnnotationAction action
-            in _highlightController.getHighlightHistory[i + 1] ?? []) {
-          if (action.isAdd) {
-            for (int j = 0; j < action.pdfAnnotation.length; j++) {
-              if (i < pdfDoc.pages.count) {
-                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
-              }
-            }
-          }
-        }
-        for (AnnotationAction action
-            in _underlineController.getUnderlineHistory[i + 1] ?? []) {
-          if (action.isAdd) {
-            for (int j = 0; j < action.pdfAnnotation.length; j++) {
-              if (i < pdfDoc.pages.count) {
-                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
-              }
-            }
-          }
-        }
-      }
-
-      // Save updated PDF
-      final output = await getTemporaryDirectory();
-      final savedPath = '${output.path}/edited.pdf';
-      final file = File(savedPath);
-      await file.writeAsBytes(await pdfDoc.save());
-      pdfDoc.dispose();
-
-      popWithResult(file); // Return saved file to previous screen
-
-      // Open the saved PDF
-      // OpenFile.open(savedPath);
-    } catch (e) {
-      debugPrint('Error while saving drawing and text: $e');
-    } finally {
-      setState(() {
-        _isSaving = false; // Stop loader
-      });
-    }
-  }
 
   popWithResult(File? file) {
     Navigator.pop(context, file);
@@ -340,13 +175,35 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
 
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
+
+      // Check if the image size is greater than 100 KB
+      Uint8List compressedBytes = bytes;
+      if (bytes.lengthInBytes > 200 * 1024) {
+        compressedBytes = await _compressImage(bytes);
+      }
+
+      final codec = await ui.instantiateImageCodec(compressedBytes);
       final frame = await codec.getNextFrame();
       final ui.Image image = frame.image;
 
       _imageController.addImage(image);
       setState(() {});
     }
+  }
+
+  // ✅ Image compression function
+  Future<Uint8List> _compressImage(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 800, // Resize to reduce size
+    );
+    final frame = await codec.getNextFrame();
+    final ui.Image image = frame.image;
+
+    final ByteData? byteData = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+    return byteData!.buffer.asUint8List();
   }
 
   Widget getAppBarContent() {
@@ -366,6 +223,49 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     }
   }
 
+  Future<void> _resetAllChanges(BuildContext context) async {
+    bool confirmReset = await _showResetConfirmation(context);
+    if (confirmReset) {
+      // ✅ Clear all changes
+      _drawingController.clearAllPages();
+      _imageController.clearAllPages();
+      _textBoxController.clearAllPages();
+      _highlightController.clearAllPages(_pdfViewerController);
+      _underlineController.clearAllPages(_pdfViewerController);
+      setState(() {});
+    }
+  }
+
+  Future<bool> _showResetConfirmation(
+    BuildContext context, {
+    bool reset = true,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: Text('Confirm ${reset ? "Reset" : "Clear"}'),
+              content: Text(
+                reset
+                    ? 'This will clear all modifications across all pages of the PDF. Do you want to proceed?'
+                    : "This will clear all modifications on the current page of the PDF. Do you want to proceed?",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(reset ? 'Reset' : "Clear"),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -375,9 +275,44 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           _selectedIndex != -1
               ? null
               : AppBar(
+                title: TextButton.icon(
+                  onPressed: () async {
+                    _resetAllChanges(context);
+                  },
+                  icon: const Icon(
+                    Icons.delete,
+                    color: Colors.white70,
+                    size: 18,
+                  ),
+
+                  label: const Text(
+                    'Reset',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ),
                 actions: [
                   TextButton.icon(
-                    onPressed: _saveDrawing,
+                    onPressed: () async {
+                      setState(() {
+                        _isSaving = true;
+                      });
+                      await _savePdfController.saveDrawing(
+                        pdfFile: widget.pdfFile,
+                        totalPages: _totalPages,
+                        context: context,
+                        drawingController: _drawingController,
+                        imageController: _imageController,
+                        textBoxController: _textBoxController,
+                        highlightController: _highlightController,
+                        underlineController: _underlineController,
+                        refresh: () {
+                          setState(() {});
+                        },
+                      );
+                      setState(() {
+                        _isSaving = false;
+                      });
+                    },
                     icon: const Icon(Icons.save, color: Colors.white, size: 20),
 
                     label: const Text(
@@ -396,114 +331,186 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                     size: 20,
                   ),
                 ),
+
                 automaticallyImplyLeading: false,
-                title: getAppBarContent(),
+
                 backgroundColor: Colors.black,
                 centerTitle:
                     true, // Avoid centering when row has multiple elements
               ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SingleChildScrollView(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 mainAxisSize: MainAxisSize.max,
                 children: [
-                  SizedBox(
-                    height: MediaQuery.of(context).size.width * 1.414,
-                    width: MediaQuery.of(context).size.width,
-                    child: Stack(
-                      children: [
-                        Opacity(
-                          opacity: _isSaving ? 0 : 1,
-                          child: SfPdfViewer.file(
-                            key: _pdfViewerKey,
-                            widget.pdfFile,
-                            controller: _pdfViewerController,
-                            pageLayoutMode: PdfPageLayoutMode.single,
-                            scrollDirection: PdfScrollDirection.horizontal,
-                            canShowScrollHead: false,
-                            canShowPaginationDialog: false,
-                            canShowTextSelectionMenu: false,
-                            pageSpacing: 0,
-                            maxZoomLevel: 1,
-                            onTextSelectionChanged: (details) {
-                              setState(() {
-                                if (details.selectedText != null) {
-                                  isTextSelected = true;
-                                } else {
-                                  isTextSelected = false;
-                                }
-                              });
-                            },
-                            onDocumentLoaded: (details) {
-                              setState(() {
-                                _totalPages = details.document.pages.count;
-                                _isPageLoaded = true; // Set page loaded to true
-                              });
-                              _highlightController.setPage(_currentPage);
-                              _underlineController.setPage(_currentPage);
-                            },
-                            onPageChanged: (details) {
-                              setState(() {
-                                _currentPage = details.newPageNumber;
-                                _isPageLoaded =
-                                    false; // Reset until page fully loads
-                              });
-                              _drawingController.setPage(_currentPage);
-                              _highlightController.setPage(_currentPage);
-                              _underlineController.setPage(_currentPage);
-                              Future.delayed(
-                                const Duration(milliseconds: 400),
-                                () {
+                  SingleChildScrollView(
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.width * 1.414,
+                      width: MediaQuery.of(context).size.width,
+                      child: Stack(
+                        children: [
+                          IgnorePointer(
+                            ignoring:
+                                _selectedIndex != -1 &&
+                                _selectedIndex != 2 &&
+                                _selectedIndex != 3,
+                            child: Opacity(
+                              opacity: _isSaving ? 0 : 1,
+                              child: SfPdfViewer.file(
+                                key: _pdfViewerKey,
+                                widget.pdfFile,
+                                controller: _pdfViewerController,
+                                pageLayoutMode: PdfPageLayoutMode.single,
+                                scrollDirection: PdfScrollDirection.horizontal,
+                                canShowScrollHead: false,
+                                canShowPaginationDialog: false,
+                                canShowTextSelectionMenu: false,
+                                pageSpacing: 0,
+                                maxZoomLevel: 1,
+                                onTextSelectionChanged: (details) {
                                   setState(() {
-                                    _isPageLoaded =
-                                        true; // Set after delay to allow rendering
+                                    if (details.selectedText != null) {
+                                      isTextSelected = true;
+                                    } else {
+                                      isTextSelected = false;
+                                    }
                                   });
                                 },
-                              );
-                            },
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Opacity(
-                            opacity:
-                                _isSaving
-                                    ? 0
-                                    : _isPageLoaded
-                                    ? 1
-                                    : 0,
-                            child: IgnorePointer(
-                              ignoring:
-                                  _selectedIndex != 0 &&
-                                  _selectedIndex != 1 &&
-                                  _selectedIndex != 4,
-                              child: DrawingCanvas(
-                                drawingController: _drawingController,
-                                textBoxController: _textBoxController,
-                                imageController: _imageController,
-                                currentPage: _currentPage,
-                                selectedMode: selectedMode,
-                                callback: () {
-                                  setState(() {});
+                                onDocumentLoaded: (details) {
+                                  setState(() {
+                                    _totalPages = details.document.pages.count;
+                                    _isPageLoaded =
+                                        true; // Set page loaded to true
+                                  });
+                                  _highlightController.setPage(_currentPage);
+                                  _underlineController.setPage(_currentPage);
+                                },
+                                onPageChanged: (details) {
+                                  setState(() {
+                                    _currentPage = details.newPageNumber;
+                                    _isPageLoaded =
+                                        false; // Reset until page fully loads
+                                  });
+                                  _drawingController.setPage(_currentPage);
+                                  _highlightController.setPage(_currentPage);
+                                  _underlineController.setPage(_currentPage);
+                                  Future.delayed(
+                                    const Duration(milliseconds: 400),
+                                    () {
+                                      setState(() {
+                                        _isPageLoaded =
+                                            true; // Set after delay to allow rendering
+                                      });
+                                    },
+                                  );
                                 },
                               ),
                             ),
                           ),
-                        ),
-                        Positioned.fill(
-                          child: Opacity(
-                            opacity: _isSaving ? 1 : 0,
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
+                          Positioned.fill(
+                            child: Opacity(
+                              opacity: !_isPageLoaded || revertView ? 0 : 1,
+
+                              child: IgnorePointer(
+                                ignoring: _selectedIndex == -1,
+                                child: DrawingCanvas(
+                                  drawingController: _drawingController,
+                                  textBoxController: _textBoxController,
+                                  imageController: _imageController,
+                                  currentPage: _currentPage,
+                                  selectedMode: selectedMode,
+                                  callback: () {
+                                    setState(() {});
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                          Positioned(
+                            right: 15,
+
+                            bottom: 15,
+                            child: GestureDetector(
+                              onTapDown: (_) {
+                                setState(() {
+                                  revertView = true; // Set to true when tapped
+                                });
+                              },
+                              onTapCancel: () {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    setState(() {
+                                      revertView = false;
+                                    });
+                                  },
+                                );
+                              },
+                              onTapUp: (_) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    setState(() {
+                                      revertView = false;
+                                    });
+                                  },
+                                ); // Reset after tap
+                              },
+                              child: AnimatedContainer(
+                                margin: EdgeInsets.all(8),
+                                duration: const Duration(milliseconds: 200),
+                                decoration: BoxDecoration(
+                                  color:
+                                      revertView
+                                          ? Colors.grey.shade700.withOpacity(
+                                            0.5,
+                                          ) // Active color
+                                          : Colors.grey.withOpacity(
+                                            0.5,
+                                          ), // Inactive color
+                                  borderRadius: BorderRadius.circular(50),
+                                  border: Border.all(
+                                    color:
+                                        revertView
+                                            ? Colors.grey.shade700
+                                            : Colors.grey.shade900,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  revertView
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+
+                                  color:
+                                      revertView
+                                          ? Colors.grey.shade700
+                                          : Colors.grey.shade900,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_isSaving)
+                            Positioned.fill(
+                              child: Opacity(
+                                opacity: _isSaving ? 1 : 0,
+                                child: Container(
+                                  color: Colors.black,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   Container(
@@ -592,9 +599,9 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                   ),
                 ],
               ),
-              getAppBarContent(),
-            ],
-          ),
+            ),
+            getAppBarContent(),
+          ],
         ),
       ),
       bottomNavigationBar: BottomAppBar(
@@ -650,6 +657,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                       setState(() {});
                     }
                     : null,
+            text: "Undo",
           ),
           _buildUndoRedoButton(
             icon: Icons.redo,
@@ -668,6 +676,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                       setState(() {});
                     }
                     : null,
+            text: "Redo",
           ),
           _buildActionButton(
             onPressed: onAdd,
@@ -676,15 +685,29 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             centerBtnColor: centerBtnColor,
           ),
           _buildUndoRedoButton(
-            icon: Icons.refresh_outlined,
+            icon: Icons.check,
+            enabled: true,
+            onPressed: () {
+              setState(() {
+                _selectedIndex = -1;
+                _changeMode(DrawingMode.none);
+              });
+            },
+            text: "Done",
+          ),
+          _buildUndoRedoButton(
+            icon: Icons.replay,
             enabled: controller.hasClearContent(),
             onPressed:
                 controller.hasClearContent()
-                    ? () {
-                      controller.clear();
-                      setState(() {});
+                    ? () async {
+                      if (await _showResetConfirmation(context, reset: false)) {
+                        controller.clear();
+                        setState(() {});
+                      }
                     }
                     : null,
+            text: "Clear",
           ),
 
           // if (selectedMode == DrawingMode.highlight)
@@ -710,14 +733,6 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           //       _selectAnnotationColor(false);
           //     },
           //   ),
-          IconButton(
-            icon: const Icon(Icons.check, color: Colors.white, size: 30),
-            onPressed: () {
-              setState(() {
-                _selectedIndex = -1;
-              });
-            },
-          ),
         ],
       ),
     );
@@ -728,10 +743,27 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     required IconData icon,
     required bool enabled,
     required VoidCallback? onPressed,
+    String text = '',
   }) {
-    return IconButton(
-      icon: Icon(icon, color: enabled ? Colors.white : Colors.grey[700]),
-      onPressed: enabled ? onPressed : null,
+    return GestureDetector(
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: enabled ? Colors.white : Colors.grey[700]),
+
+            Text(
+              text,
+              style: TextStyle(
+                color: enabled ? Colors.white : Colors.grey[700],
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1084,7 +1116,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
                           },
                           child: const Icon(
                             Icons.open_with,
-                            size: 16,
+                            size: 18,
                             color: Colors.blue,
                           ),
                         ),
@@ -1104,35 +1136,80 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       left: imageBox.position.dx,
       top: imageBox.position.dy,
       child: GestureDetector(
-        onScaleUpdate: (details) {
+        onPanUpdate: (details) {
           if (widget.selectedMode == DrawingMode.image) {
             setState(() {
-              // ✅ Update position
-              imageBox.position += details.focalPointDelta;
-
-              // ✅ Update scale (pinch zoom)
-              if (details.scale != 1.0) {
-                imageBox.width *= details.scale;
-                imageBox.height *= details.scale;
-              }
-
-              // ✅ Update rotation
-              imageBox.rotation += details.rotation;
+              // ✅ Drag to move image
+              imageBox.position += details.delta;
             });
           }
         },
-        child: Transform(
-          transform:
-              Matrix4.identity()
-                ..translate(imageBox.width / 2, imageBox.height / 2)
-                ..rotateZ(imageBox.rotation)
-                ..translate(-imageBox.width / 2, -imageBox.height / 2),
-          alignment: Alignment.center,
-          child: SizedBox(
-            width: imageBox.width,
-            height: imageBox.height,
-            child: CustomPaint(painter: ImagePainter(imageBox)),
-          ),
+        child: Stack(
+          children: [
+            Transform(
+              transform:
+                  Matrix4.identity()
+                    ..translate(imageBox.width / 2, imageBox.height / 2)
+                    ..rotateZ(imageBox.rotation)
+                    ..translate(-imageBox.width / 2, -imageBox.height / 2),
+              alignment: Alignment.center,
+              child: Container(
+                width: imageBox.width + 2,
+                height: imageBox.height + 2,
+                margin: const EdgeInsets.all(8),
+
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.blue),
+                ),
+                child: CustomPaint(painter: ImagePainter(imageBox)),
+              ),
+            ),
+            // ✅ Cross Icon to Remove Image
+            if (widget.selectedMode == DrawingMode.image)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      widget.imageController.removeImage(imageBox);
+                    });
+                  },
+                  child: const CircleAvatar(
+                    backgroundColor: Colors.red,
+                    radius: 10,
+                    child: Icon(Icons.close, size: 12, color: Colors.white),
+                  ),
+                ),
+              ),
+            // ✅ Resize Icon at Bottom Right
+            if (widget.selectedMode == DrawingMode.image)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: GestureDetector(
+                  onPanUpdate: (details) {
+                    setState(() {
+                      // ✅ Resize while maintaining aspect ratio
+                      double aspectRatio = imageBox.width / imageBox.height;
+                      double newWidth = imageBox.width + details.delta.dx;
+                      double newHeight = newWidth / aspectRatio;
+
+                      // ✅ Enforce minimum size to prevent disappearing
+                      if (newWidth > 20 && newHeight > 20) {
+                        imageBox.width = newWidth;
+                        imageBox.height = newHeight;
+                      }
+                    });
+                  },
+                  child: const Icon(
+                    Icons.open_with,
+                    size: 18,
+                    color: Colors.blue,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -28,37 +29,6 @@ class DrawingController extends ChangeNotifier {
     _undoStack.putIfAbsent(page, () => []);
     notifyListeners();
   }
-
-  // void addTextBox() {
-  //   _textBoxes[_currentPage] ??= [];
-  //   TextBox newTextBox = TextBox("New Text", Offset(100, 100));
-  //   _textBoxes[_currentPage]!.add(newTextBox);
-  //   _history[_currentPage]!.add(TextBoxAction(newTextBox, isAdd: true));
-  //   notifyListeners();
-  // }
-
-  // void removeTextBox(TextBox textBox) {
-  //   _textBoxes[_currentPage]?.remove(textBox);
-  //   _history[_currentPage]!.add(TextBoxAction(textBox, isAdd: false));
-  //   notifyListeners();
-  // }
-
-  // void selectTextBox(Offset tapPosition) {
-  //   for (TextBox textBox in _textBoxes[_currentPage] ?? []) {
-  //     Rect textBoxRect = Rect.fromLTWH(
-  //       textBox.position.dx,
-  //       textBox.position.dy,
-  //       textBox.width,
-  //       textBox.height,
-  //     );
-
-  //     if (textBoxRect.contains(tapPosition)) {
-  //       // Do something when a text box is selected, like highlighting or allowing drag
-  //       notifyListeners();
-  //       return;
-  //     }
-  //   }
-  // }
 
   void startDraw(Offset startPoint) {
     _history.putIfAbsent(_currentPage, () => []);
@@ -143,6 +113,14 @@ class DrawingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  clearAllPages() {
+    _history.clear();
+    _undoStack.clear();
+    _textBoxes.clear();
+    setPage(0);
+    notifyListeners();
+  }
+
   Future<ByteData?> getImageData(int page) async {
     try {
       final RenderRepaintBoundary boundary =
@@ -159,8 +137,10 @@ class DrawingController extends ChangeNotifier {
       final double height = originalImage.height.toDouble();
 
       // Flip vertically: Translate and scale
-      canvas.translate(0, height);
-      canvas.scale(1, -1); // Only invert Y-axis
+      if (Platform.isAndroid) {
+        canvas.translate(0, height);
+        canvas.scale(1, -1);
+      } // Only invert Y-axis
 
       // Draw the original image onto the flipped canvas
       final Paint paint = Paint();
