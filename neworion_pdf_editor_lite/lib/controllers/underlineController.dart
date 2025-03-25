@@ -43,10 +43,25 @@ class UnderlineController extends ChangeNotifier {
   }
 
   // ✅ Clear Underline
-  void clear() {
+  void clear(PdfViewerController pdfViewerController) {
+    _underlineHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.removeAnnotation(action.annotation);
+    });
     _underlineHistory[_currentPage]?.clear();
     _underlineUndoStack[_currentPage]?.clear();
     notifyListeners();
+  }
+
+  hide(PdfViewerController pdfViewerController) {
+    _underlineHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.removeAnnotation(action.annotation);
+    });
+  }
+
+  unhide(PdfViewerController pdfViewerController) {
+    _underlineHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.addAnnotation(action.annotation);
+    });
   }
 
   // ✅ Check if content exists

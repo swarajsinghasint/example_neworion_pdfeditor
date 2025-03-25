@@ -41,26 +41,9 @@ class SavePdfController extends ChangeNotifier {
         drawingController.setPage(i + 1);
         PdfPage page = pdfDoc.pages[i];
         // Delay to allow page change to complete
-        await Future.delayed(const Duration(milliseconds: 200));
-
-        // Get drawing data as image and add it to the PDF
-        ByteData? imageData = await drawingController.getImageData(i + 1);
-        if (imageData != null) {
-          final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
-
-          // Get page dimensions
-          final double pageWidth = page.getClientSize().width;
-          final double pageHeight = page.getClientSize().height;
-
-          // Draw the captured image on the respective page
-          page.graphics.drawImage(
-            image,
-            Rect.fromLTWH(0, 0, pageWidth, pageHeight),
-          );
-        }
+        // await Future.delayed(const Duration(milliseconds: 200));
 
         // ✅ Add images to PDF
-
         for (var imageBox in imageController.getAllImageBoxes()[i + 1] ?? []) {
           final imgData = await _convertImageToUint8List(imageBox.image);
           final PdfImage pdfImage = PdfBitmap(imgData);
@@ -103,6 +86,22 @@ class SavePdfController extends ChangeNotifier {
 
           // ✅ Restore original graphics state
           page.graphics.restore();
+        }
+
+        // Get drawing data as image and add it to the PDF
+        ByteData? imageData = await drawingController.getImageData(i + 1);
+        if (imageData != null) {
+          final PdfImage image = PdfBitmap(imageData.buffer.asUint8List());
+
+          // Get page dimensions
+          final double pageWidth = page.getClientSize().width;
+          final double pageHeight = page.getClientSize().height;
+
+          // Draw the captured image on the respective page
+          page.graphics.drawImage(
+            image,
+            Rect.fromLTWH(0, 0, pageWidth, pageHeight),
+          );
         }
 
         // ✅ Draw text boxes on the PDF

@@ -44,11 +44,28 @@ class HighlightController extends ChangeNotifier {
   }
 
   // ✅ Clear Highlight
-  void clear() {
+  void clear(PdfViewerController pdfViewerController) {
+    _highlightHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.removeAnnotation(action.annotation);
+    });
     _highlightHistory[_currentPage]?.clear();
     _highlightUndoStack[_currentPage]?.clear();
+
     notifyListeners();
   }
+
+  hide(PdfViewerController pdfViewerController) {
+    _highlightHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.removeAnnotation(action.annotation);
+    });
+  }
+
+  unhide(PdfViewerController pdfViewerController) {
+    _highlightHistory[_currentPage]?.forEach((action) {
+      pdfViewerController.addAnnotation(action.annotation);
+    });
+  }
+  
 
   // ✅ Check if content exists
   bool hasContent({bool isRedo = false}) {

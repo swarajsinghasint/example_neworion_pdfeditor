@@ -425,71 +425,90 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                             ),
                           ),
                         ),
-                        Positioned(
-                          right: 15,
+                        if (_drawingController.hasContent() ||
+                            _textBoxController.hasContent() ||
+                            _imageController.hasContent() ||
+                            _highlightController.hasContent() ||
+                            _underlineController.hasContent())
+                          Positioned(
+                            right: 15,
 
-                          bottom: 15,
-                          child: GestureDetector(
-                            onTapDown: (_) {
-                              setState(() {
-                                revertView = true; // Set to true when tapped
-                              });
-                            },
-                            onTapCancel: () {
-                              Future.delayed(
-                                const Duration(milliseconds: 100),
-                                () {
-                                  setState(() {
-                                    revertView = false;
-                                  });
-                                },
-                              );
-                            },
-                            onTapUp: (_) {
-                              Future.delayed(
-                                const Duration(milliseconds: 100),
-                                () {
-                                  setState(() {
-                                    revertView = false;
-                                  });
-                                },
-                              ); // Reset after tap
-                            },
-                            child: AnimatedContainer(
-                              margin: EdgeInsets.all(8),
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color:
-                                    revertView
-                                        ? Colors.grey.shade700.withOpacity(
-                                          0.5,
-                                        ) // Active color
-                                        : Colors.grey.withOpacity(
-                                          0.5,
-                                        ), // Inactive color
-                                borderRadius: BorderRadius.circular(50),
-                                border: Border.all(
+                            bottom: 15,
+                            child: GestureDetector(
+                              onTapDown: (_) {
+                                _underlineController.hide(_pdfViewerController);
+                                _highlightController.hide(_pdfViewerController);
+                                setState(() {
+                                  revertView = true; // Set to true when tapped
+                                });
+                              },
+                              onTapCancel: () {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    _underlineController.unhide(
+                                      _pdfViewerController,
+                                    );
+                                    _highlightController.unhide(
+                                      _pdfViewerController,
+                                    );
+                                    setState(() {
+                                      revertView = false;
+                                    });
+                                  },
+                                );
+                              },
+                              onTapUp: (_) {
+                                Future.delayed(
+                                  const Duration(milliseconds: 100),
+                                  () {
+                                    _underlineController.unhide(
+                                      _pdfViewerController,
+                                    );
+                                    _highlightController.unhide(
+                                      _pdfViewerController,
+                                    );
+                                    setState(() {
+                                      revertView = false;
+                                    });
+                                  },
+                                ); // Reset after tap
+                              },
+                              child: AnimatedContainer(
+                                margin: EdgeInsets.all(8),
+                                duration: const Duration(milliseconds: 200),
+                                decoration: BoxDecoration(
+                                  color:
+                                      revertView
+                                          ? Colors.grey.shade700.withOpacity(
+                                            0.5,
+                                          ) // Active color
+                                          : Colors.grey.withOpacity(
+                                            0.5,
+                                          ), // Inactive color
+                                  borderRadius: BorderRadius.circular(50),
+                                  border: Border.all(
+                                    color:
+                                        revertView
+                                            ? Colors.grey.shade700
+                                            : Colors.grey.shade900,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(
+                                  revertView
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+
                                   color:
                                       revertView
                                           ? Colors.grey.shade700
                                           : Colors.grey.shade900,
+                                  size: 20,
                                 ),
-                              ),
-                              padding: const EdgeInsets.all(4.0),
-                              child: Icon(
-                                revertView
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-
-                                color:
-                                    revertView
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade900,
-                                size: 20,
                               ),
                             ),
                           ),
-                        ),
                         if (_isSaving)
                           Positioned.fill(
                             child: Opacity(
@@ -696,7 +715,15 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                 controller.hasClearContent()
                     ? () async {
                       if (await _showResetConfirmation(context, reset: false)) {
-                        controller.clear();
+                        if (controller is HighlightController ||
+                            controller is UnderlineController) {
+                          controller.clear(
+                            pdfController!,
+                          ); // ✅ Correct for annotations
+                        } else {
+                          controller.clear(); // ✅ For other controllers
+                        }
+
                         setState(() {});
                       }
                     }

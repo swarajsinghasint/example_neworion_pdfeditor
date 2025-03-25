@@ -379,10 +379,10 @@ packages:
   neworion_pdf_editor_lite:
     dependency: "direct main"
     description:
-      path: "/Users/swarajsingh/Documents/personal/example_neworion_pdfeditor/neworion_pdf_editor_lite"
-      relative: false
+      path: neworion_pdf_editor_lite
+      relative: true
     source: path
-    version: "0.0.1"
+    version: "0.0.5"
   open_file:
     dependency: transitive
     description:

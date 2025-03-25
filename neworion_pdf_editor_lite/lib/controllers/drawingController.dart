@@ -134,13 +134,12 @@ class DrawingController extends ChangeNotifier {
       final ui.PictureRecorder recorder = ui.PictureRecorder();
       final Canvas canvas = Canvas(recorder);
 
-      final double height = originalImage.height.toDouble();
-
-      // Flip vertically: Translate and scale
-      if (Platform.isAndroid) {
-        canvas.translate(0, height);
-        canvas.scale(1, -1);
-      } // Only invert Y-axis
+      //  final double height = originalImage.height.toDouble();
+      //       // Flip vertically: Translate and scale
+      //       if (Platform.isAndroid) {
+      //         canvas.translate(0, height);
+      //         canvas.scale(1, -1);
+      //       } // Only invert Y-axis
 
       // Draw the original image onto the flipped canvas
       final Paint paint = Paint();
