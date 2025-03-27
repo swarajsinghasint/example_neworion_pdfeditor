@@ -162,6 +162,47 @@ class DrawingController extends ChangeNotifier {
   Map<int, List<PaintContent>> getAllDrawings() {
     return _history;
   }
+
+// void adjustPages(int pageIndex, {bool isAdd = true}) {
+//   if (isAdd) {
+//     // Shift content forward to create space for a new page
+//     for (int i = _history.length; i > pageIndex; i--) {
+//       _history[i] = _history[i - 1] ?? [];
+//       _undoStack[i] = _undoStack[i - 1] ?? [];
+//       _textBoxes[i] = _textBoxes[i - 1] ?? [];
+//     }
+
+//     // Create an empty page at the given index
+//     _history[pageIndex] = [];
+//     _undoStack[pageIndex] = [];
+//     _textBoxes[pageIndex] = [];
+//   } else {
+//     // Remove content for the deleted page
+//     _history.remove(pageIndex);
+//     _undoStack.remove(pageIndex);
+//     _textBoxes.remove(pageIndex);
+
+//     // Shift content backward to fill the gap
+//     for (int i = pageIndex; i < _history.length; i++) {
+//       _history[i] = _history[i + 1] ?? [];
+//       _undoStack[i] = _undoStack[i + 1] ?? [];
+//       _textBoxes[i] = _textBoxes[i + 1] ?? [];
+//     }
+
+//     // Remove the last page after shifting to prevent duplication
+//     _history.remove(_history.length);
+//     _undoStack.remove(_undoStack.length);
+//     _textBoxes.remove(_textBoxes.length);
+//   }
+
+//   // Handle invalid page selection after operation
+//   if (_currentPage >= _history.length) {
+//     _currentPage = (_history.isEmpty) ? 0 : _history.keys.last;
+//   }
+
+//   notifyListeners();
+// }
+
 }
 
 class SimpleLine extends PaintContent {

@@ -167,7 +167,6 @@ class SavePdfController extends ChangeNotifier {
         }
       }
 
-      // _addBlankPageAt(pdfDoc, 2);
 
       // Save updated PDF
       final output = await getTemporaryDirectory();

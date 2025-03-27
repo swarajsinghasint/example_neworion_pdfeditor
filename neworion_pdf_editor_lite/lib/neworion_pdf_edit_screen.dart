@@ -18,8 +18,22 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class OPdfEditScreen extends StatefulWidget {
   final File pdfFile;
-
-  const OPdfEditScreen({super.key, required this.pdfFile});
+  final bool draw;
+  final bool text;
+  final bool highlight;
+  final bool underline;
+  final bool image;
+  final bool page;
+  const OPdfEditScreen({
+    super.key,
+    required this.pdfFile,
+    required this.draw,
+    required this.text,
+    required this.highlight,
+    required this.underline,
+    required this.image,
+    required this.page,
+  });
 
   @override
   State<OPdfEditScreen> createState() => _OPdfEditScreenState();
@@ -238,6 +252,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   Future<bool> _showResetConfirmation(
     BuildContext context, {
     bool reset = true,
+    String modificationsType = "modification",
   }) async {
     return await showDialog<bool>(
           context: context,
@@ -276,7 +291,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               content: Text(
                 reset
                     ? 'This will clear all modifications across all pages of the PDF. Do you want to proceed?'
-                    : 'This will clear all modifications on the current page of the PDF. Do you want to proceed?',
+                    : 'This will clear all $modificationsType on the current page of the PDF. Do you want to proceed?',
                 style: const TextStyle(fontSize: 14, color: Colors.black87),
               ),
               actionsAlignment: MainAxisAlignment.spaceEvenly,
@@ -322,51 +337,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         false;
   }
 
-  // void _addBlankPageAt(int pageIndex,) {
-  //   if (pageIndex < 0 || pageIndex > pdfDoc.pages.count) {
-  //     debugPrint('Invalid page index: $pageIndex');
-  //     return;
-  //   }
-
-  //   // ✅ Get size of the first page to maintain consistent dimensions
-  //   final Size pageSize = Size(
-  //     pdfDoc.pages[0].getClientSize().width,
-  //     pdfDoc.pages[0].getClientSize().height,
-  //   );
-
-  //   // ✅ Insert a blank page at the specified index
-  //   pdfDoc.pages.insert(
-  //     pageIndex,
-  //     pageSize,
-  //   );
-  // }
-
-  // void _removePage(int currentPage,PdfDocument pdfDoc, ) {
-  //   final PdfDocument pdfDoc = PdfDocument(inputBytes: pdfFileBytes);
-
-  //   // Remove the selected page
-  //   if (pdfDoc.pages.count > 1) {
-  //     pdfDoc.pages.removeAt(currentPage - 1);
-
-  //     // Update the file after removing the page
-  //     _saveUpdatedPdf(pdfDoc);
-  //     pdfDoc.dispose();
-
-  //     setState(() {
-  //       totalPages -= 1; // Decrease total pages
-  //       if (_currentPage > totalPages) {
-  //         _currentPage = totalPages;
-  //       }
-  //       refresh(); // Refresh UI
-  //     });
-  //   }
-  // }
-
   addPageAt(int index) async {
     var val = await _savePdfController.addBlankPageAt(index, pdfFile);
     if (val != null) {
       pdfFile = val;
     }
+    _currentPage = 1;
+    // _drawingController.adjustPages(index, isAdd: true);
     setState(() {});
   }
 
@@ -379,110 +356,180 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }
 
   void _showAddPageOptions(BuildContext context) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      backgroundColor: Colors.white,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 📄 Header with Icon and Title
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text(
-                    'Add Page',
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text(
+                      'Add blank Page',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Icon(Icons.edit_document, color: Colors.amber, size: 24),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+
+                // Add Page Before
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.arrow_upward, color: Colors.green),
+                  ),
+                  title: Text(
+                    'Add at Page no. $_currentPage',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    addPageAt(_currentPage - 1);
+                  },
+                ),
+
+                // Add Page After
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.arrow_forward, color: Colors.blue),
+                  ),
+                  title: Text(
+                    'Add at Page no. ${_currentPage + 1}',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    addPageAt(_currentPage);
+                    // _addPage(_currentPage, addBefore: false);
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                // Cancel Button
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: Colors.red),
+                  label: const Text(
+                    'Cancel',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: Colors.red,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Icon(Icons.edit_document, color: Colors.amber, size: 24),
-                ],
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    backgroundColor: Colors.red.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future _showRemovePageConfirmation(
+    BuildContext context, {
+    int pageNumber = 1,
+  }) async {
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_forever,
+                  color: Colors.red,
+                  size: 24,
+                ),
               ),
-              const Divider(thickness: 1, height: 20),
-
-              // ✅ Add Page Before
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.arrow_upward, color: Colors.green),
-                ),
-                title: const Text(
-                  'Add Page Before',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  'Insert a blank page before the current page.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-
-                  addPageAt(_currentPage - 1);
-                },
-              ),
-
-              // 📄 Add Page After
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.arrow_downward, color: Colors.blue),
-                ),
-                title: const Text(
-                  'Add Page After',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  'Insert a blank page after the current page.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  // _addPage(_currentPage, addBefore: false);
-                },
-              ),
-
-              const SizedBox(height: 8),
-
-              // ❌ Cancel Button
-              TextButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Colors.red),
-                label: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  backgroundColor: Colors.red.withOpacity(0.1),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+              const SizedBox(width: 12),
+              const Text(
+                'Confirm Remove',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
+          content: Text(
+            'Are you sure you want to remove Page no.$pageNumber?\n(this action can not be undo/reset)',
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actions: [
+            // ❌ Cancel Button
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context, false),
+              icon: const Icon(Icons.close, color: Colors.blue, size: 18),
+              label: const Text('Cancel', style: TextStyle(color: Colors.blue)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+            ),
+            // ✅ Remove Button
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                removePageAt(_currentPage);
+              },
+              icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+              label: const Text('Remove', style: TextStyle(color: Colors.red)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -641,7 +688,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                         Positioned.fill(
                           child: Opacity(
                             opacity: !_isPageLoaded || revertView ? 0 : 1,
-
+                  
                             child: IgnorePointer(
                               ignoring: _selectedIndex == -1,
                               child: DrawingCanvas(
@@ -664,14 +711,19 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                             _underlineController.hasContent())
                           Positioned(
                             right: 15,
-
+                  
                             bottom: 15,
                             child: GestureDetector(
                               onTapDown: (_) {
-                                _underlineController.hide(_pdfViewerController);
-                                _highlightController.hide(_pdfViewerController);
+                                _underlineController.hide(
+                                  _pdfViewerController,
+                                );
+                                _highlightController.hide(
+                                  _pdfViewerController,
+                                );
                                 setState(() {
-                                  revertView = true; // Set to true when tapped
+                                  revertView =
+                                      true; // Set to true when tapped
                                 });
                               },
                               onTapCancel: () {
@@ -731,7 +783,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                                   revertView
                                       ? Icons.visibility_off
                                       : Icons.visibility,
-
+                  
                                   color:
                                       revertView
                                           ? Colors.grey.shade700
@@ -854,12 +906,15 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildBottomNavItem(Icons.edit, "Draw", 0),
-            _buildBottomNavItem(Icons.text_fields, "Text", 1),
-            _buildBottomNavItem(Icons.highlight, "Highlight", 2),
-            _buildBottomNavItem(Icons.format_underline, "Underline", 3),
-            _buildBottomNavItem(Icons.image_outlined, "Image", 4),
-            _buildBottomNavItem(Icons.edit_document, "Edit Page", 5),
+            if (widget.draw) _buildBottomNavItem(Icons.edit, "Draw", 0),
+            if (widget.text) _buildBottomNavItem(Icons.text_fields, "Text", 1),
+            if (widget.highlight)
+              _buildBottomNavItem(Icons.highlight, "Highlight", 2),
+            if (widget.underline)
+              _buildBottomNavItem(Icons.format_underline, "Underline", 3),
+            if (widget.image)
+              _buildBottomNavItem(Icons.image_outlined, "Image", 4),
+            // _buildBottomNavItem(Icons.edit_document, "Page", 5),
           ],
         ),
       ),
@@ -947,7 +1002,11 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             onPressed:
                 controller.hasClearContent()
                     ? () async {
-                      if (await _showResetConfirmation(context, reset: false)) {
+                      if (await _showResetConfirmation(
+                        context,
+                        reset: false,
+                        modificationsType: selectedMode.name,
+                      )) {
                         if (controller is HighlightController ||
                             controller is UnderlineController) {
                           controller.clear(
@@ -1119,12 +1178,20 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         // Previous Button
-        _buildActionButton(
+        // _buildActionButton(
+        //   onPressed: () {
+        //     _showAddPageOptions(context);
+        //   },
+        //   icon: Icons.add_circle_outline,
+        //   label: "Add Page",
+        // ),
+        _buildUndoRedoButton(
+          icon: Icons.add_circle_outline,
+          enabled: true,
           onPressed: () {
             _showAddPageOptions(context);
           },
-          icon: Icons.add_circle_outline,
-          label: "Add Page",
+          text: "Add Page",
         ),
         _buildUndoRedoButton(
           icon: Icons.check,
@@ -1137,13 +1204,13 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           },
           text: "Done",
         ),
-        // Previous Button
-        _buildActionButton(
-          onPressed: () {
-            removePageAt(_currentPage);
-          },
+        _buildUndoRedoButton(
           icon: Icons.remove_circle_outline_outlined,
-          label: "Remove Page",
+          enabled: true,
+          onPressed: () {
+            _showRemovePageConfirmation(context);
+          },
+          text: "Remove Page",
         ),
       ],
     ),
@@ -1169,7 +1236,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             }
             switch (index) {
               case 0:
-                _changeMode(DrawingMode.draw);
+                _changeMode(DrawingMode.drawing);
                 break;
               case 1:
                 _changeMode(DrawingMode.text);
@@ -1217,7 +1284,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }
 }
 
-enum DrawingMode { none, draw, text, image, highlight, underline, edit }
+enum DrawingMode { none, drawing, text, image, highlight, underline, edit }
 
 class DrawingCanvas extends StatefulWidget {
   final DrawingController drawingController;
@@ -1286,17 +1353,17 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onPanStart: (details) {
-        if (widget.selectedMode == DrawingMode.draw) {
+        if (widget.selectedMode == DrawingMode.drawing) {
           widget.drawingController.startDraw(details.localPosition);
         }
       },
       onPanUpdate: (details) {
-        if (widget.selectedMode == DrawingMode.draw) {
+        if (widget.selectedMode == DrawingMode.drawing) {
           widget.drawingController.drawing(details.localPosition);
         }
       },
       onPanEnd: (details) {
-        if (widget.selectedMode == DrawingMode.draw) {
+        if (widget.selectedMode == DrawingMode.drawing) {
           widget.callback();
         }
       },
@@ -1309,7 +1376,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
         children: [
           ...widget.imageController.getImageBoxes().map(_buildImageWidget),
           IgnorePointer(
-            ignoring: widget.selectedMode != DrawingMode.draw,
+            ignoring: widget.selectedMode != DrawingMode.drawing,
             child: ClipRect(
               child: RepaintBoundary(
                 key: widget.drawingController.painterKey,
