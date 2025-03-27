@@ -43,6 +43,28 @@ class SavePdfController extends ChangeNotifier {
         // Delay to allow page change to complete
         // await Future.delayed(const Duration(milliseconds: 200));
 
+        // ✅ Add Annotations (Highlight/Underline)
+        for (AnnotationAction action
+            in highlightController.getHighlightHistory[i + 1] ?? []) {
+          if (action.isAdd) {
+            for (int j = 0; j < action.pdfAnnotation.length; j++) {
+              if (i < pdfDoc.pages.count) {
+                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
+              }
+            }
+          }
+        }
+        for (AnnotationAction action
+            in underlineController.getUnderlineHistory[i + 1] ?? []) {
+          if (action.isAdd) {
+            for (int j = 0; j < action.pdfAnnotation.length; j++) {
+              if (i < pdfDoc.pages.count) {
+                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
+              }
+            }
+          }
+        }
+
         // ✅ Add images to PDF
         for (var imageBox in imageController.getAllImageBoxes()[i + 1] ?? []) {
           final imgData = await _convertImageToUint8List(imageBox.image);
@@ -143,29 +165,9 @@ class SavePdfController extends ChangeNotifier {
             ),
           );
         }
-
-        // ✅ Add Annotations (Highlight/Underline)
-        for (AnnotationAction action
-            in highlightController.getHighlightHistory[i + 1] ?? []) {
-          if (action.isAdd) {
-            for (int j = 0; j < action.pdfAnnotation.length; j++) {
-              if (i < pdfDoc.pages.count) {
-                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
-              }
-            }
-          }
-        }
-        for (AnnotationAction action
-            in underlineController.getUnderlineHistory[i + 1] ?? []) {
-          if (action.isAdd) {
-            for (int j = 0; j < action.pdfAnnotation.length; j++) {
-              if (i < pdfDoc.pages.count) {
-                pdfDoc.pages[i].annotations.add(action.pdfAnnotation[j]);
-              }
-            }
-          }
-        }
       }
+
+      // _addBlankPageAt(pdfDoc, 2);
 
       // Save updated PDF
       final output = await getTemporaryDirectory();
@@ -195,5 +197,61 @@ class SavePdfController extends ChangeNotifier {
       format: ui.ImageByteFormat.png,
     );
     return byteData!.buffer.asUint8List();
+  }
+
+  Future<File?> addBlankPageAt(int pageIndex, File pdfFile) async {
+    final pdfDoc = PdfDocument(inputBytes: await pdfFile.readAsBytes());
+    if (pageIndex < 0 || pageIndex > pdfDoc.pages.count) {
+      debugPrint('Invalid page index: $pageIndex');
+      return null;
+    }
+
+    // ✅ Get size of the first page to maintain consistent dimensions
+    final Size pageSize = Size(
+      pdfDoc.pages[0].getClientSize().width,
+      pdfDoc.pages[0].getClientSize().height,
+    );
+
+    // ✅ Insert a blank page at the specified index
+    pdfDoc.pages.insert(pageIndex, pageSize);
+
+    return await saveFile(pdfDoc: pdfDoc, addTimestap: false, pdfFile: pdfFile);
+  }
+
+  Future<File?> removePage(int currentPage, File pdfFile) async {
+    final PdfDocument pdfDoc = PdfDocument(
+      inputBytes: await pdfFile.readAsBytes(),
+    );
+
+    // Remove the selected page
+    if (pdfDoc.pages.count > 1) {
+      pdfDoc.pages.removeAt(currentPage - 1);
+
+      return await saveFile(pdfDoc: pdfDoc, pdfFile: pdfFile);
+    }
+    return null;
+  }
+
+  Future<File?> saveFile({
+    bool addTimestap = false,
+    required File pdfFile,
+    required PdfDocument pdfDoc,
+  }) async {
+    final output = await getTemporaryDirectory();
+    final String originalName = pdfFile.path.split('/').last.split('.').first;
+
+    String savedPath = "";
+    // Create new file name with timestamp
+    if (addTimestap) {
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      savedPath = '${output.path}/${originalName}_$timestamp.pdf';
+    } else {
+      savedPath = '${output.path}/$originalName.pdf';
+    }
+
+    final file = File(savedPath);
+
+    await file.writeAsBytes(await pdfDoc.save());
+    return file;
   }
 }

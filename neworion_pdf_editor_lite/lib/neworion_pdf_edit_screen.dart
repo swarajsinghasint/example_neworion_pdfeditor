@@ -45,10 +45,12 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   bool isTextSelected = false;
   bool _isSaving = false;
   bool revertView = false;
+  late File pdfFile;
 
   @override
   void initState() {
     super.initState();
+    pdfFile = widget.pdfFile;
     _pdfViewerController = PdfViewerController();
   }
 
@@ -213,6 +215,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
         return underlineOption();
       case 4:
         return imageOption();
+      case 5:
+        return editPage();
       default:
         return Container();
     }
@@ -239,26 +243,249 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           context: context,
           builder: (context) {
             return AlertDialog(
-              title: Text('Confirm ${reset ? "Reset" : "Clear"}'),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color:
+                          reset
+                              ? Colors.red.withOpacity(0.2)
+                              : Colors.orange.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      reset ? Icons.refresh : Icons.replay,
+                      color: reset ? Colors.red : Colors.orange,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    reset ? 'Confirm Reset' : 'Confirm Clear',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
               content: Text(
                 reset
                     ? 'This will clear all modifications across all pages of the PDF. Do you want to proceed?'
-                    : "This will clear all modifications on the current page of the PDF. Do you want to proceed?",
+                    : 'This will clear all modifications on the current page of the PDF. Do you want to proceed?',
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
               ),
+              actionsAlignment: MainAxisAlignment.spaceEvenly,
               actions: [
-                TextButton(
+                // ❌ Cancel Button
+                TextButton.icon(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
+                  icon: const Icon(Icons.close, color: Colors.blue, size: 18),
+                  label: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.blue),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
                 ),
-                TextButton(
+                // ✅ Reset or Clear Button
+                TextButton.icon(
                   onPressed: () => Navigator.pop(context, true),
-                  child: Text(reset ? 'Reset' : "Clear"),
+                  icon: Icon(
+                    reset ? Icons.refresh : Icons.replay,
+                    color: reset ? Colors.red : Colors.orange,
+                    size: 18,
+                  ),
+                  label: Text(
+                    reset ? 'Reset' : 'Clear',
+                    style: TextStyle(color: reset ? Colors.red : Colors.orange),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
                 ),
               ],
             );
           },
         ) ??
         false;
+  }
+
+  // void _addBlankPageAt(int pageIndex,) {
+  //   if (pageIndex < 0 || pageIndex > pdfDoc.pages.count) {
+  //     debugPrint('Invalid page index: $pageIndex');
+  //     return;
+  //   }
+
+  //   // ✅ Get size of the first page to maintain consistent dimensions
+  //   final Size pageSize = Size(
+  //     pdfDoc.pages[0].getClientSize().width,
+  //     pdfDoc.pages[0].getClientSize().height,
+  //   );
+
+  //   // ✅ Insert a blank page at the specified index
+  //   pdfDoc.pages.insert(
+  //     pageIndex,
+  //     pageSize,
+  //   );
+  // }
+
+  // void _removePage(int currentPage,PdfDocument pdfDoc, ) {
+  //   final PdfDocument pdfDoc = PdfDocument(inputBytes: pdfFileBytes);
+
+  //   // Remove the selected page
+  //   if (pdfDoc.pages.count > 1) {
+  //     pdfDoc.pages.removeAt(currentPage - 1);
+
+  //     // Update the file after removing the page
+  //     _saveUpdatedPdf(pdfDoc);
+  //     pdfDoc.dispose();
+
+  //     setState(() {
+  //       totalPages -= 1; // Decrease total pages
+  //       if (_currentPage > totalPages) {
+  //         _currentPage = totalPages;
+  //       }
+  //       refresh(); // Refresh UI
+  //     });
+  //   }
+  // }
+
+  addPageAt(int index) async {
+    var val = await _savePdfController.addBlankPageAt(index, pdfFile);
+    if (val != null) {
+      pdfFile = val;
+    }
+    setState(() {});
+  }
+
+  removePageAt(int index) async {
+    var val = await _savePdfController.removePage(index, pdfFile);
+    if (val != null) {
+      pdfFile = val;
+    }
+    setState(() {});
+  }
+
+  void _showAddPageOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 📄 Header with Icon and Title
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  Text(
+                    'Add Page',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  Icon(Icons.edit_document, color: Colors.amber, size: 24),
+                ],
+              ),
+              const Divider(thickness: 1, height: 20),
+
+              // ✅ Add Page Before
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_upward, color: Colors.green),
+                ),
+                title: const Text(
+                  'Add Page Before',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text(
+                  'Insert a blank page before the current page.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+
+                  addPageAt(_currentPage - 1);
+                },
+              ),
+
+              // 📄 Add Page After
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_downward, color: Colors.blue),
+                ),
+                title: const Text(
+                  'Add Page After',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text(
+                  'Insert a blank page after the current page.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  // _addPage(_currentPage, addBefore: false);
+                },
+              ),
+
+              const SizedBox(height: 8),
+
+              // ❌ Cancel Button
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.red),
+                label: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                  backgroundColor: Colors.red.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -270,20 +497,25 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           _selectedIndex != -1
               ? null
               : AppBar(
-                title: TextButton.icon(
-                  onPressed: () async {
-                    _resetAllChanges(context);
-                  },
-                  icon: const Icon(
-                    Icons.delete,
-                    color: Colors.white70,
-                    size: 18,
-                  ),
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () async {
+                        _resetAllChanges(context);
+                      },
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.white70,
+                        size: 18,
+                      ),
 
-                  label: const Text(
-                    'Reset',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
+                      label: const Text(
+                        'Reset',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                    ),
+                  ],
                 ),
                 actions: [
                   TextButton.icon(
@@ -292,7 +524,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                         _isSaving = true;
                       });
                       await _savePdfController.saveDrawing(
-                        pdfFile: widget.pdfFile,
+                        pdfFile: pdfFile,
                         totalPages: _totalPages,
                         context: context,
                         drawingController: _drawingController,
@@ -357,7 +589,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                             opacity: _isSaving ? 0 : 1,
                             child: SfPdfViewer.file(
                               key: _pdfViewerKey,
-                              widget.pdfFile,
+                              pdfFile,
                               controller: _pdfViewerController,
                               pageLayoutMode: PdfPageLayoutMode.single,
                               scrollDirection: PdfScrollDirection.horizontal,
@@ -627,6 +859,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
             _buildBottomNavItem(Icons.highlight, "Highlight", 2),
             _buildBottomNavItem(Icons.format_underline, "Underline", 3),
             _buildBottomNavItem(Icons.image_outlined, "Image", 4),
+            _buildBottomNavItem(Icons.edit_document, "Edit Page", 5),
           ],
         ),
       ),
@@ -873,6 +1106,49 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     label: "Add Image",
   );
 
+  Widget editPage() => Container(
+    padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 10),
+    decoration: BoxDecoration(
+      color: Colors.black,
+      border: Border(
+        top: BorderSide(color: Colors.grey[900]!),
+        bottom: BorderSide(color: Colors.grey[900]!),
+      ),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        // Previous Button
+        _buildActionButton(
+          onPressed: () {
+            _showAddPageOptions(context);
+          },
+          icon: Icons.add_circle_outline,
+          label: "Add Page",
+        ),
+        _buildUndoRedoButton(
+          icon: Icons.check,
+          enabled: true,
+          onPressed: () {
+            setState(() {
+              _selectedIndex = -1;
+              _changeMode(DrawingMode.none);
+            });
+          },
+          text: "Done",
+        ),
+        // Previous Button
+        _buildActionButton(
+          onPressed: () {
+            removePageAt(_currentPage);
+          },
+          icon: Icons.remove_circle_outline_outlined,
+          label: "Remove Page",
+        ),
+      ],
+    ),
+  );
+
   void _changeMode(DrawingMode mode) {
     setState(() {
       selectedMode = mode;
@@ -907,6 +1183,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               case 4:
                 _changeMode(DrawingMode.image);
                 break;
+              case 5:
+                _changeMode(DrawingMode.edit);
               default:
                 _changeMode(DrawingMode.none);
                 break;
@@ -939,7 +1217,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
   }
 }
 
-enum DrawingMode { none, draw, text, image, highlight, underline }
+enum DrawingMode { none, draw, text, image, highlight, underline, edit }
 
 class DrawingCanvas extends StatefulWidget {
   final DrawingController drawingController;
