@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -163,46 +162,66 @@ class DrawingController extends ChangeNotifier {
     return _history;
   }
 
-// void adjustPages(int pageIndex, {bool isAdd = true}) {
-//   if (isAdd) {
-//     // Shift content forward to create space for a new page
-//     for (int i = _history.length; i > pageIndex; i--) {
-//       _history[i] = _history[i - 1] ?? [];
-//       _undoStack[i] = _undoStack[i - 1] ?? [];
-//       _textBoxes[i] = _textBoxes[i - 1] ?? [];
-//     }
+   adjustPages(int pageIndex, {bool isAdd = true}) async{
+    final newHistory = <int, List<PaintContent>>{};
+    final newUndoStack = <int, List<PaintContent>>{};
+    final newTextBoxes = <int, List<TextBox>>{};
+    _history.forEach((key, value) {
+      if (isAdd) {
+        newHistory[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Removed page, skip it
+        } else {
+          newHistory[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
 
-//     // Create an empty page at the given index
-//     _history[pageIndex] = [];
-//     _undoStack[pageIndex] = [];
-//     _textBoxes[pageIndex] = [];
-//   } else {
-//     // Remove content for the deleted page
-//     _history.remove(pageIndex);
-//     _undoStack.remove(pageIndex);
-//     _textBoxes.remove(pageIndex);
+    _undoStack.forEach((key, value) {
+      if (isAdd) {
+        newUndoStack[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Removed page, skip it
+        } else {
+          newUndoStack[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
 
-//     // Shift content backward to fill the gap
-//     for (int i = pageIndex; i < _history.length; i++) {
-//       _history[i] = _history[i + 1] ?? [];
-//       _undoStack[i] = _undoStack[i + 1] ?? [];
-//       _textBoxes[i] = _textBoxes[i + 1] ?? [];
-//     }
+    _textBoxes.forEach((key, value) {
+      if (isAdd) {
+        newTextBoxes[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Removed page, skip it
+        } else {
+          newTextBoxes[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
 
-//     // Remove the last page after shifting to prevent duplication
-//     _history.remove(_history.length);
-//     _undoStack.remove(_undoStack.length);
-//     _textBoxes.remove(_textBoxes.length);
-//   }
+    // Replace old maps with adjusted ones
+    _history
+      ..clear()
+      ..addAll(newHistory);
+    _undoStack
+      ..clear()
+      ..addAll(newUndoStack);
+    _textBoxes
+      ..clear()
+      ..addAll(newTextBoxes);
 
-//   // Handle invalid page selection after operation
-//   if (_currentPage >= _history.length) {
-//     _currentPage = (_history.isEmpty) ? 0 : _history.keys.last;
-//   }
+    // Adjust current page index if needed
+    if (!isAdd && _currentPage > pageIndex) {
+      _currentPage -= 1;
+    } else if (isAdd && _currentPage >= pageIndex) {
+      _currentPage += 1;
+    }
 
-//   notifyListeners();
-// }
-
+    notifyListeners();
+  }
 }
 
 class SimpleLine extends PaintContent {

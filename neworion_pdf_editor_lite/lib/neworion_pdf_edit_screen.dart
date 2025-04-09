@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:neworion_pdf_editor_lite/components/colorPicker.dart';
-import 'package:neworion_pdf_editor_lite/components/textEditingBox.dart';
-import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/highlightController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/savePdfController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/underlineController.dart';
+import 'package:neworion_pdf_editor_lite/components/text_editing_box.dart';
+import 'package:neworion_pdf_editor_lite/controllers/annotation_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/drawing_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/highlight_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/image_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/save_pdf_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/text_box_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/underline_controller.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
@@ -342,8 +342,21 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     if (val != null) {
       pdfFile = val;
     }
+
+    await _drawingController.adjustPages(index + 1, isAdd: true);
+    await _textBoxController.adjustPages(index + 1, isAdd: true);
+    await _imageController.adjustPages(index + 1, isAdd: true);
+    await _highlightController.adjustPages(
+      index + 1,
+      _pdfViewerController,
+      isAdd: true,
+    );
+    await _underlineController.adjustPages(
+      index + 1,
+      _pdfViewerController,
+      isAdd: true,
+    );
     _currentPage = 1;
-    // _drawingController.adjustPages(index, isAdd: true);
     setState(() {});
   }
 
@@ -352,6 +365,20 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
     if (val != null) {
       pdfFile = val;
     }
+    await _drawingController.adjustPages(index, isAdd: false);
+    await _textBoxController.adjustPages(index, isAdd: false);
+    await _imageController.adjustPages(index, isAdd: false);
+    await _highlightController.adjustPages(
+      index,
+      _pdfViewerController,
+      isAdd: false,
+    );
+    await _underlineController.adjustPages(
+      index,
+      _pdfViewerController,
+      isAdd: false,
+    );
+    _currentPage = 1;
     setState(() {});
   }
 
@@ -614,7 +641,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
               ),
       body: SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             SingleChildScrollView(
               reverse: true,
@@ -688,7 +715,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                         Positioned.fill(
                           child: Opacity(
                             opacity: !_isPageLoaded || revertView ? 0 : 1,
-                  
+
                             child: IgnorePointer(
                               ignoring: _selectedIndex == -1,
                               child: DrawingCanvas(
@@ -711,19 +738,14 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                             _underlineController.hasContent())
                           Positioned(
                             right: 15,
-                  
+
                             bottom: 15,
                             child: GestureDetector(
                               onTapDown: (_) {
-                                _underlineController.hide(
-                                  _pdfViewerController,
-                                );
-                                _highlightController.hide(
-                                  _pdfViewerController,
-                                );
+                                _underlineController.hide(_pdfViewerController);
+                                _highlightController.hide(_pdfViewerController);
                                 setState(() {
-                                  revertView =
-                                      true; // Set to true when tapped
+                                  revertView = true; // Set to true when tapped
                                 });
                               },
                               onTapCancel: () {
@@ -783,7 +805,7 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
                                   revertView
                                       ? Icons.visibility_off
                                       : Icons.visibility,
-                  
+
                                   color:
                                       revertView
                                           ? Colors.grey.shade700
@@ -901,23 +923,32 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomAppBar(
-        color: Colors.black,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            if (widget.draw) _buildBottomNavItem(Icons.edit, "Draw", 0),
-            if (widget.text) _buildBottomNavItem(Icons.text_fields, "Text", 1),
-            if (widget.highlight)
-              _buildBottomNavItem(Icons.highlight, "Highlight", 2),
-            if (widget.underline)
-              _buildBottomNavItem(Icons.format_underline, "Underline", 3),
-            if (widget.image)
-              _buildBottomNavItem(Icons.image_outlined, "Image", 4),
-            // _buildBottomNavItem(Icons.edit_document, "Page", 5),
-          ],
-        ),
-      ),
+      bottomNavigationBar:
+          _selectedIndex != -1
+              ? null
+              : BottomAppBar(
+                color: Colors.black,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    if (widget.draw) _buildBottomNavItem(Icons.edit, "Draw", 0),
+                    if (widget.text)
+                      _buildBottomNavItem(Icons.text_fields, "Text", 1),
+                    if (widget.highlight)
+                      _buildBottomNavItem(Icons.highlight, "Highlight", 2),
+                    if (widget.underline)
+                      _buildBottomNavItem(
+                        Icons.format_underline,
+                        "Underline",
+                        3,
+                      ),
+                    if (widget.image)
+                      _buildBottomNavItem(Icons.image_outlined, "Image", 4),
+                    if (widget.page)
+                      _buildBottomNavItem(Icons.edit_document, "Page", 5),
+                  ],
+                ),
+              ),
     );
   }
 
@@ -934,8 +965,8 @@ class _OPdfEditScreenState extends State<OPdfEditScreen> {
       decoration: BoxDecoration(
         color: Colors.black,
         border: Border(
-          top: BorderSide(color: Colors.grey[900]!),
-          bottom: BorderSide(color: Colors.grey[900]!),
+          // top: BorderSide(color: Colors.grey[900]!),
+          // bottom: BorderSide(color: Colors.grey[900]!),
         ),
       ),
       child: Row(

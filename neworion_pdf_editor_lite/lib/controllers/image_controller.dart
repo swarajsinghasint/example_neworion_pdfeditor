@@ -94,11 +94,73 @@ class ImageController extends ChangeNotifier {
         _undoStack[_currentPage]?.isNotEmpty == true;
   }
 
-  clearAllPages(){
+  clearAllPages() {
     _imageBoxes.clear();
     _history.clear();
     _undoStack.clear();
     setPage(0);
+    notifyListeners();
+  }
+
+  adjustPages(int pageIndex, {bool isAdd = true}) async {
+    final newImageBoxes = <int, List<ImageBox>>{};
+    final newHistory = <int, List<ImageAction>>{};
+    final newUndoStack = <int, List<ImageAction>>{};
+
+    _imageBoxes.forEach((key, value) {
+      if (isAdd) {
+        newImageBoxes[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip deleted page
+        } else {
+          newImageBoxes[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _history.forEach((key, value) {
+      if (isAdd) {
+        newHistory[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip deleted page
+        } else {
+          newHistory[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _undoStack.forEach((key, value) {
+      if (isAdd) {
+        newUndoStack[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip deleted page
+        } else {
+          newUndoStack[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    // Update maps
+    _imageBoxes
+      ..clear()
+      ..addAll(newImageBoxes);
+    _history
+      ..clear()
+      ..addAll(newHistory);
+    _undoStack
+      ..clear()
+      ..addAll(newUndoStack);
+
+    // Adjust current page
+    if (!isAdd && _currentPage > pageIndex) {
+      _currentPage -= 1;
+    } else if (isAdd && _currentPage >= pageIndex) {
+      _currentPage += 1;
+    }
+
     notifyListeners();
   }
 }

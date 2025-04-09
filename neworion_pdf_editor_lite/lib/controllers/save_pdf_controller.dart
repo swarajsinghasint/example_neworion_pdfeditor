@@ -1,16 +1,18 @@
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/drawingController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/highlightController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/imageController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/textBoxController.dart';
-import 'package:neworion_pdf_editor_lite/controllers/underlineController.dart';
-import 'package:open_file/open_file.dart';
+import 'package:neworion_pdf_editor_lite/controllers/annotation_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/drawing_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/highlight_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/image_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/text_box_controller.dart';
+import 'package:neworion_pdf_editor_lite/controllers/underline_controller.dart';
+// import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -42,6 +44,8 @@ class SavePdfController extends ChangeNotifier {
         PdfPage page = pdfDoc.pages[i];
         // Delay to allow page change to complete
         // await Future.delayed(const Duration(milliseconds: 200));
+        // Get drawing data as image and add it to the PDF
+        await Future.delayed(const Duration(milliseconds: 200));
 
         // ✅ Add Annotations (Highlight/Underline)
         for (AnnotationAction action
@@ -166,7 +170,6 @@ class SavePdfController extends ChangeNotifier {
           );
         }
       }
-
 
       // Save updated PDF
       final output = await getTemporaryDirectory();

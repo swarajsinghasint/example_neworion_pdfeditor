@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/annotation_controller.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class HighlightController extends ChangeNotifier {
@@ -65,7 +65,6 @@ class HighlightController extends ChangeNotifier {
       pdfViewerController.addAnnotation(action.annotation);
     });
   }
-  
 
   // ✅ Check if content exists
   bool hasContent({bool isRedo = false}) {
@@ -84,6 +83,54 @@ class HighlightController extends ChangeNotifier {
     _highlightUndoStack.clear();
     pdfViewerController.removeAllAnnotations();
     setPage(0);
+    notifyListeners();
+  }
+
+  adjustPages(
+    int pageIndex,
+    PdfViewerController pdfViewerController, {
+    bool isAdd = true,
+  }) async {
+    final newHighlightHistory = <int, List<AnnotationAction>>{};
+    final newHighlightUndoStack = <int, List<AnnotationAction>>{};
+
+    _highlightHistory.forEach((key, value) {
+      if (isAdd) {
+        newHighlightHistory[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip the deleted page
+        } else {
+          newHighlightHistory[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _highlightUndoStack.forEach((key, value) {
+      if (isAdd) {
+        newHighlightUndoStack[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip the deleted page
+        } else {
+          newHighlightUndoStack[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _highlightHistory
+      ..clear()
+      ..addAll(newHighlightHistory);
+    _highlightUndoStack
+      ..clear()
+      ..addAll(newHighlightUndoStack);
+
+    if (!isAdd && _currentPage > pageIndex) {
+      _currentPage -= 1;
+    } else if (isAdd && _currentPage >= pageIndex) {
+      _currentPage += 1;
+    }
+    unhide(pdfViewerController);
     notifyListeners();
   }
 }

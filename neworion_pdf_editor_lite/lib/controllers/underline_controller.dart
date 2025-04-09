@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:neworion_pdf_editor_lite/controllers/annotationController.dart';
+import 'package:neworion_pdf_editor_lite/controllers/annotation_controller.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 class UnderlineController extends ChangeNotifier {
@@ -82,6 +82,55 @@ class UnderlineController extends ChangeNotifier {
     pdfViewerController.removeAllAnnotations();
 
     setPage(0);
+    notifyListeners();
+  }
+
+  adjustPages(
+    int pageIndex,
+    PdfViewerController pdfViewerController, {
+    bool isAdd = true,
+  }) async {
+    final newUnderlineHistory = <int, List<AnnotationAction>>{};
+    final newUnderlineUndoStack = <int, List<AnnotationAction>>{};
+
+    _underlineHistory.forEach((key, value) {
+      if (isAdd) {
+        newUnderlineHistory[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip the deleted page
+        } else {
+          newUnderlineHistory[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _underlineUndoStack.forEach((key, value) {
+      if (isAdd) {
+        newUnderlineUndoStack[key >= pageIndex ? key + 1 : key] = value;
+      } else {
+        if (key == pageIndex) {
+          // Skip the deleted page
+        } else {
+          newUnderlineUndoStack[key > pageIndex ? key - 1 : key] = value;
+        }
+      }
+    });
+
+    _underlineHistory
+      ..clear()
+      ..addAll(newUnderlineHistory);
+    _underlineUndoStack
+      ..clear()
+      ..addAll(newUnderlineUndoStack);
+
+    if (!isAdd && _currentPage > pageIndex) {
+      _currentPage -= 1;
+    } else if (isAdd && _currentPage >= pageIndex) {
+      _currentPage += 1;
+    }
+    unhide(pdfViewerController);
+
     notifyListeners();
   }
 }
